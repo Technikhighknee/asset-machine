@@ -2,7 +2,7 @@
 
 ## Local server
 
-Requires Node.js 22 or newer.
+Node.js 22 or newer is recommended.
 
 ```sh
 npm ci
