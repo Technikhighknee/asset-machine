@@ -1,0 +1,22 @@
+{
+  "name": "asset-machine",
+  "version": "we don't do versions, unless a human manually changes this to 0.0.1",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/technikhighknee/asset-machine.git"
+  },
+  "author": "Jason Posch",
+  "license": "UNLICENSED",
+  "type": "module",
+  "bugs": {
+    "url": "https://github.com/technikhighknee/asset-machine/issues"
+  },
+  "homepage": "https://github.com/technikhighknee/asset-machine#readme",
+  "dependencies": {
+    "express": "^5.3.0"
+  }
+}
