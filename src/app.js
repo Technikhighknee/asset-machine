@@ -1,18 +1,27 @@
 import express from 'express';
 import { config } from './config.js';
-import { mountMiddleware } from './middleware.js';
 import { createApiRouter } from './routes.js';
+import { mountMiddleware } from './middleware.js';
+import { security } from './security.js';
+import { logRequest } from './logger.js';
+import { notFound, handleError } from './errors.js';
 
 export async function createApp() {
   const app = express();
   app.disable('x-powered-by');
 
+  app.use(security);
+  app.use(logRequest);
+  app.use(express.json({ limit: config.jsonLimit }));
+  app.use(express.urlencoded({ extended: false, limit: config.jsonLimit }));
+
   await mountMiddleware(app, 'before');
   app.use('/api', await createApiRouter());
-  app.use('/api', (_req, res) => res.status(404).json({ error: 'Not Found' }));
+  app.use('/api', notFound);
   app.use(express.static(config.publicDir, { dotfiles: 'deny' }));
   await mountMiddleware(app, 'after');
-  await mountMiddleware(app, 'errors');
+  app.use(notFound);
+  app.use(handleError);
 
   return app;
 }

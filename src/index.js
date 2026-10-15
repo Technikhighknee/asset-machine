@@ -1,29 +1,17 @@
 import { createServer } from 'node:http';
+import { createApp } from './app.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
-import { createApp } from './app.js';
 import { attachRealtime } from './realtime.js';
 
 async function main() {
-  const app = await createApp();
-  const server = createServer(app);
+  const server = createServer(await createApp());
   const realtime = await attachRealtime(server);
   let stopping = false;
 
-  async function shutdown(error) {
+  async function stop() {
     if (stopping) return;
     stopping = true;
-    if (error) {
-      process.exitCode = 1;
-      logger.error('Server failure', { error: error.stack ?? String(error) });
-    }
-
-    const watchdog = setTimeout(() => {
-      logger.error('Shutdown timed out');
-      process.exit(1);
-    }, 5000);
-    watchdog.unref();
-
     try {
       await realtime.close();
       if (server.listening) {
@@ -31,19 +19,20 @@ async function main() {
           server.close((error) => error ? reject(error) : resolve());
         });
       }
-    } catch (closeError) {
+    } catch (error) {
+      logger.error('Shutdown failed', { error: String(error) });
       process.exitCode = 1;
-      logger.error('Shutdown failure', { error: String(closeError) });
-    } finally {
-      clearTimeout(watchdog);
     }
   }
 
-  process.once('SIGINT', () => { void shutdown(); });
-  process.once('SIGTERM', () => { void shutdown(); });
-  process.once('uncaughtException', (error) => { void shutdown(error); });
-  process.once('unhandledRejection', (reason) => { void shutdown(reason); });
-  server.on('error', (error) => { void shutdown(error); });
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.once(signal, () => { void stop(); });
+  }
+
+  server.on('error', (error) => {
+    logger.error('Server error', { error: String(error) });
+    process.exitCode = 1;
+  });
 
   server.listen(config.port, config.host, () => {
     logger.info('Server listening', { host: config.host, port: config.port });
@@ -51,6 +40,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  logger.error('Startup failure', { error: error.stack ?? String(error) });
+  logger.error('Startup failed', { error: String(error) });
   process.exitCode = 1;
 });
