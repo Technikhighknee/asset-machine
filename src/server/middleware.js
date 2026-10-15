@@ -1,8 +1,8 @@
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-import { config } from './config.js';
-import { discover } from './discovery.js';
+import { config } from '../runtime/config.js';
+import { discover } from '../runtime/discovery.js';
 
 export async function mountMiddleware(app, stage) {
   const directory = join(config.middlewareDir, stage);

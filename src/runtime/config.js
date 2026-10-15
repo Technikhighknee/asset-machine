@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('../../', import.meta.url));
 const port = Number(process.env.PORT ?? 3000);
 
 if (!Number.isInteger(port) || port < 1 || port > 65535) {

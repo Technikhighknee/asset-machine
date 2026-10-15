@@ -1,6 +1,6 @@
 import { STATUS_CODES } from 'node:http';
 
-import { logger } from './logger.js';
+import { logger } from '../runtime/logger.js';
 
 export function notFound(_req, res) {
   res.status(404).json({ error: 'Not Found' });

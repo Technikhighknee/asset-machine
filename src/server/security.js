@@ -1,4 +1,4 @@
-import { config } from './config.js';
+import { config } from '../runtime/config.js';
 
 export function isTrusted(req) {
   const host = config.host + ':' + req.socket.localPort;

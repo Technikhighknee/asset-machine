@@ -1,9 +1,9 @@
 import express from 'express';
-import { config } from './config.js';
+import { config } from '../runtime/config.js';
 import { createApiRouter } from './routes.js';
 import { mountMiddleware } from './middleware.js';
 import { security } from './security.js';
-import { logRequest } from './logger.js';
+import { logRequest } from '../runtime/logger.js';
 import { notFound, handleError } from './errors.js';
 
 export async function createApp() {

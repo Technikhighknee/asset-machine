@@ -2,8 +2,8 @@ import { relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Router } from 'express';
 
-import { config } from './config.js';
-import { discover } from './discovery.js';
+import { config } from '../runtime/config.js';
+import { discover } from '../runtime/discovery.js';
 
 export async function createApiRouter() {
   const router = Router();

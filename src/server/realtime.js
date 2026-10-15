@@ -2,10 +2,10 @@ import { relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { WebSocket, WebSocketServer } from 'ws';
 
-import { config } from './config.js';
-import { discover } from './discovery.js';
-import { subscribe } from './events.js';
-import { logger } from './logger.js';
+import { config } from '../runtime/config.js';
+import { discover } from '../runtime/discovery.js';
+import { subscribe } from '../runtime/events.js';
+import { logger } from '../runtime/logger.js';
 import { isTrusted } from './security.js';
 
 function send(client, type, payload) {

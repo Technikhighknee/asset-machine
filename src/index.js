@@ -1,9 +1,9 @@
 import { createServer } from 'node:http';
 
-import { createApp } from './app.js';
-import { config } from './config.js';
-import { logger } from './logger.js';
-import { attachRealtime } from './realtime.js';
+import { createApp } from './server/app.js';
+import { config } from './runtime/config.js';
+import { logger } from './runtime/logger.js';
+import { attachRealtime } from './server/realtime.js';
 
 async function main() {
   const server = createServer(await createApp());
