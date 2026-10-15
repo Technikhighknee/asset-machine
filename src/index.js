@@ -1,31 +1,56 @@
-import app from './app.js';
+import { createServer } from 'node:http';
+import { config } from './config.js';
+import { logger } from './logger.js';
+import { createApp } from './app.js';
+import { attachRealtime } from './realtime.js';
 
-const host = '127.0.0.1';
-const port = Number(process.env.PORT ?? 3000);
+async function main() {
+  const app = await createApp();
+  const server = createServer(app);
+  const realtime = await attachRealtime(server);
+  let stopping = false;
 
-if (!Number.isInteger(port) || port < 1 || port > 65535) {
-  throw new RangeError('PORT must be an integer from 1 to 65535');
-}
-
-const server = app.listen(port, host);
-
-server.on('listening', () => {
-  console.log(`Asset Machine listening on http://${host}:${port}`);
-});
-
-server.on('error', (error) => {
-  console.error('HTTP server error:', error);
-  process.exitCode = 1;
-});
-
-function shutdown() {
-  server.close((error) => {
+  async function shutdown(error) {
+    if (stopping) return;
+    stopping = true;
     if (error) {
-      console.error('HTTP server shutdown error:', error);
       process.exitCode = 1;
+      logger.error('Server failure', { error: error.stack ?? String(error) });
     }
+
+    const watchdog = setTimeout(() => {
+      logger.error('Shutdown timed out');
+      process.exit(1);
+    }, 5000);
+    watchdog.unref();
+
+    try {
+      await realtime.close();
+      if (server.listening) {
+        await new Promise((resolve, reject) => {
+          server.close((error) => error ? reject(error) : resolve());
+        });
+      }
+    } catch (closeError) {
+      process.exitCode = 1;
+      logger.error('Shutdown failure', { error: String(closeError) });
+    } finally {
+      clearTimeout(watchdog);
+    }
+  }
+
+  process.once('SIGINT', () => { void shutdown(); });
+  process.once('SIGTERM', () => { void shutdown(); });
+  process.once('uncaughtException', (error) => { void shutdown(error); });
+  process.once('unhandledRejection', (reason) => { void shutdown(reason); });
+  server.on('error', (error) => { void shutdown(error); });
+
+  server.listen(config.port, config.host, () => {
+    logger.info('Server listening', { host: config.host, port: config.port });
   });
 }
 
-process.once('SIGINT', shutdown);
-process.once('SIGTERM', shutdown);
+main().catch((error) => {
+  logger.error('Startup failure', { error: error.stack ?? String(error) });
+  process.exitCode = 1;
+});

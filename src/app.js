@@ -1,12 +1,18 @@
 import express from 'express';
-import apiRoutes from './routes/api.js';
-import { notFound, handleError } from './middleware/errors.js';
+import { config } from './config.js';
+import { mountMiddleware } from './middleware.js';
+import { createApiRouter } from './routes.js';
 
-const app = express();
+export async function createApp() {
+  const app = express();
+  app.disable('x-powered-by');
 
-app.disable('x-powered-by');
-app.use('/api', express.json(), apiRoutes);
-app.use(notFound);
-app.use(handleError);
+  await mountMiddleware(app, 'before');
+  app.use('/api', await createApiRouter());
+  app.use('/api', (_req, res) => res.status(404).json({ error: 'Not Found' }));
+  app.use(express.static(config.publicDir, { dotfiles: 'deny' }));
+  await mountMiddleware(app, 'after');
+  await mountMiddleware(app, 'errors');
 
-export default app;
+  return app;
+}
