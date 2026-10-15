@@ -3,7 +3,8 @@
   "version": "we don't do versions, unless a human manually changes this to 0.0.1",
   "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
   },
   "repository": {
     "type": "git",
