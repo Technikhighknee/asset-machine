@@ -7,3 +7,5 @@ to reuse, modify, or redistribute its contents is granted, except as permitted
 by applicable law or GitHub's Terms of Service.
 
 See [LICENSE](LICENSE) for details.
+
+For inquiries or licensing requests, contact [poschjason@gmail.com](mailto:poschjason@gmail.com).
