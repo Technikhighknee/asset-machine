@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+
 import { createApp } from './app.js';
 import { config } from './config.js';
 import { logger } from './logger.js';
@@ -12,11 +13,16 @@ async function main() {
   async function stop() {
     if (stopping) return;
     stopping = true;
+
     try {
       await realtime.close();
+
       if (server.listening) {
         await new Promise((resolve, reject) => {
-          server.close((error) => error ? reject(error) : resolve());
+          server.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          });
         });
       }
     } catch (error) {
@@ -26,7 +32,9 @@ async function main() {
   }
 
   for (const signal of ['SIGINT', 'SIGTERM']) {
-    process.once(signal, () => { void stop(); });
+    process.once(signal, () => {
+      void stop();
+    });
   }
 
   server.on('error', (error) => {
@@ -35,7 +43,10 @@ async function main() {
   });
 
   server.listen(config.port, config.host, () => {
-    logger.info('Server listening', { host: config.host, port: config.port });
+    logger.info('Server listening', {
+      host: config.host,
+      port: config.port,
+    });
   });
 }
 

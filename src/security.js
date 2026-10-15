@@ -2,8 +2,10 @@ import { config } from './config.js';
 
 export function isTrusted(req) {
   const host = config.host + ':' + req.socket.localPort;
+  const origin = req.headers.origin;
+
   return req.headers.host === host &&
-    (!req.headers.origin || req.headers.origin === 'http://' + host);
+    (!origin || origin === 'http://' + host);
 }
 
 export function security(req, res, next) {
@@ -14,8 +16,10 @@ export function security(req, res, next) {
 
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'no-referrer');
+
   if (req.path === '/api' || req.path.startsWith('/api/')) {
     res.setHeader('Cache-Control', 'no-store');
   }
+
   next();
 }
