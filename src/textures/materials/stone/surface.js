@@ -9,10 +9,10 @@ function smooth(a, b, value) {
 }
 
 const geology = [
-  { stone: [159, 145, 125], inclusion: [173, 152, 125], mortar: [123, 116, 103] },
-  { stone: [145, 145, 136], inclusion: [161, 157, 146], mortar: [117, 117, 108] },
-  { stone: [163, 138, 108], inclusion: [172, 146, 118], mortar: [118, 107, 95] },
-  { stone: [142, 133, 119], inclusion: [158, 141, 120], mortar: [112, 106, 98] },
+  { stone: [159, 145, 125], inclusion: [173, 152, 125], mortar: [157, 145, 127] },
+  { stone: [145, 145, 136], inclusion: [161, 157, 146], mortar: [149, 146, 135] },
+  { stone: [163, 138, 108], inclusion: [172, 146, 118], mortar: [160, 145, 123] },
+  { stone: [142, 133, 119], inclusion: [158, 141, 120], mortar: [147, 137, 120] },
 ];
 
 export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
@@ -20,6 +20,9 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
   const seam = structure.range(0.001, 0.002) * grammar.edgeWidth;
   const bevelWidth = structure.range(0.006, 0.014) * grammar.edgeWidth;
   const age = weather.range(0.05, 0.3);
+  const mortarLightness = pigment.range(0.93, 1.075);
+  const mortarAggregate = structure.range(0.4, 1);
+  const mortarLift = structure.range(0.39, 0.46);
   const profiles = new Map();
 
   function identity(stone) {
@@ -49,6 +52,24 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
 
   return (u, v, placement) => {
     const { stone, x, y, distance } = placement;
+    const mortarCoarse = fbm(u, v, 13, 11, seeds.structure ^ 0x618fac31, 3);
+    const mortarGrit = field(u, v, 91, 87, seeds.structure ^ 0x379dab57);
+    const mortarStain = Math.max(0, fbm(u, v, 7, 9, seeds.weather ^ 0x34b1d2f5, 3)) * age;
+    const mortarHeight = mortarLift + mortarCoarse * 0.032 + mortarGrit * 0.012;
+    const contactShade = (1 - smooth(0.0015, 0.014, Math.max(0, -distance))) * 12;
+    const mortarColor = family.mortar.map((channel) =>
+      channel * mortarLightness + mortarCoarse * 13 + mortarGrit * 13 * mortarAggregate -
+      mortarStain * 24 - contactShade
+    );
+    const mortarRoughness = clamp(0.88 + Math.abs(mortarGrit) * 0.065 + mortarStain * 0.1);
+
+    // A broad mortar pocket is a real surface, not a dark line or an absent stone.
+    // Skip stone-only microstructure completely outside the individual polygon.
+    if (distance < -0.0035) {
+      return { color: mortarColor, height: mortarHeight,
+        roughness: mortarRoughness, edge: 0, detail: mortarCoarse * 0.13 };
+    }
+
     const identityData = identity(stone);
     const rawEdge = field(x, y, 8, 8, identityData.structureSeed ^ 0x192bd531) * seam * 0.5;
     const inset = distance + rawEdge;
@@ -70,12 +91,14 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
     const porous = Math.max(0, stoneMid * 0.5 + stoneFine * 0.5 - 0.09) *
       Math.max(0, stoneCoarse + 0.28);
     const plane = stone.slopeX * (x - 0.5) + stone.slopeY * (y - 0.5);
-    const stoneHeight = 0.56 + stone.protrusion + plane +
-      fracture * identityData.facetDepth + stoneCoarse * 0.058 * stone.shape +
+    const layering = stone.faceProfile === 'stratified'
+      ? Math.sin((y * 8 + stoneCoarse * 0.45) * Math.PI) * 0.015 : 0;
+    const stoneHeight = 0.56 + stone.protrusion + plane + layering +
+      fracture * identityData.facetDepth * stone.facetStrength +
+      stoneCoarse * (stone.faceProfile === 'rounded' ? 0.039 : 0.07) * stone.shape +
       stoneMid * 0.029 * stone.shape + stoneFine * 0.007 -
       erosion * 0.042 - porous * 0.075 - crack * 0.055;
-    const mortarTexture = field(u, v, 63, 59, seeds.structure ^ 0x618fac31);
-    const height = mix(0.38 + mortarTexture * 0.014, stoneHeight * (0.65 + 0.35 * bevel), inStone);
+    const height = mix(mortarHeight, stoneHeight * (0.65 + 0.35 * bevel), inStone);
 
     // Stone color is tied to a single geological family and local inclusions.
     const pigmentMacro = fbm(x, y, 4, 5, identityData.pigmentSeed, 4);
@@ -93,15 +116,14 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
         inclusion * (family.inclusion[i] - channel) * 0.7 - dirt * 36 -
         cavity * 8 + stoneCoarse * 8 + fracture * 12 - crack * 20 - porous * 28 +
         (i === 0 ? identityData.warmth : -identityData.warmth * 0.3);
-      const mortar = family.mortar[i] + mortarTexture * 6 - dirt * 10;
-      return mix(mortar, rocky, inStone);
+      return mix(mortarColor[i], rocky, inStone);
     });
 
-    const roughness = clamp(mix(0.9 + mortarTexture * 0.02,
+    const roughness = clamp(mix(mortarRoughness,
       0.72 + identityData.roughness + Math.abs(stoneFine) * 0.07 + erosion * 0.14 +
       porous * 0.14 + crack * 0.05 + dirt * 0.14,
       inStone));
 
-    return { color, height, roughness, edge: cavity * 0.15, detail: mineral * 0.12 };
+    return { color, height, roughness, edge: cavity * 0.15 * inStone, detail: mineral * 0.12 };
   };
 }
