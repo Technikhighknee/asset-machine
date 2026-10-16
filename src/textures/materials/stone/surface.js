@@ -17,6 +17,43 @@ const geology = [
   { stone: [127, 124, 115], cool: [166, 167, 155], warm: [149, 123, 99], mortar: [119, 111, 99] },
 ];
 
+// Sparse sand and stone fragments are embedded in the lime binder.
+// The grain cells wrap on both axes so the material stays tileable.
+function mortarGrains(u, v, columns, rows, seed) {
+  const x = u * columns;
+  const y = v * rows;
+  const ix = Math.floor(x);
+  const iy = Math.floor(y);
+  let chips = 0;
+  let pale = 0;
+  let pits = 0;
+
+  for (let dy = -1; dy <= 1; dy++) {
+    for (let dx = -1; dx <= 1; dx++) {
+      const gx = ix + dx;
+      const gy = iy + dy;
+      const a = ((gx % columns) + columns) % columns;
+      const b = ((gy % rows) + rows) % rows;
+      const kind = hash(a, b, seed);
+
+      if (kind < 0.48) continue;
+
+      const cx = gx + 0.17 + hash(a, b, seed ^ 0x3192ab71) * 0.66;
+      const cy = gy + 0.17 + hash(a, b, seed ^ 0x5c67e399) * 0.66;
+      const radius = 0.12 + hash(a, b, seed ^ 0x69302c17) * 0.22;
+      const aspect = 0.7 + hash(a, b, seed ^ 0x46a203db) * 0.8;
+      const distance = Math.hypot((x - cx) * aspect, y - cy);
+      const grain = 1 - smooth(radius * 0.66, radius * 1.12, distance);
+
+      if (kind > 0.91) pits = Math.max(pits, grain);
+      else if (kind > 0.68) pale = Math.max(pale, grain);
+      else chips = Math.max(chips, grain);
+    }
+  }
+
+  return { chips, pale, pits };
+}
+
 export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
   const rock = pigment.pick(geology);
   const mortarType = pigment.range(0.82, 1.11);
@@ -59,20 +96,34 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
   return (u, v, placement) => {
     const { stone, x, y, distance } = placement;
     const g = Math.max(0, distance);
-    const mortarBody = fbm(u, v, 23, 21, seeds.structure ^ 0x3264dc81, 3);
-    const mortarGrit = field(u, v, 131, 127, seeds.structure ^ 0x51da7c3b);
+    const mortarBody = fbm(u, v, 14, 13, seeds.structure ^ 0x3264dc81, 3);
+    const trowel = field(u, v, 35, 69, seeds.structure ^ 0x3c9ed175);
+    const mortarGrit = field(u, v, 151, 147, seeds.structure ^ 0x51da7c3b);
+    const mortarDust = field(u, v, 229, 211, seeds.structure ^ 0x818a0f35);
+    const aggregate = mortarGrains(u, v, 77, 73, seeds.structure ^ 0x917ae25d);
+    const sand = mortarGrains(u, v, 157, 149, seeds.structure ^ 0x2d941c67);
     const mortarStain = Math.max(0,
       fbm(u, v, 7, 8, seeds.weather ^ 0x08ac135d, 3)) * weatherLevel;
-    const mortarHeight = 0.33 + mortarBody * 0.017 + mortarGrit * 0.007;
-    const edgeShadow = 1 - smooth(-0.001, 0.014, Math.abs(distance));
-    const mortarColor = rock.mortar.map((channel) =>
-      channel * mortarType + mortarBody * 18 +
-      mortarGrit * (grammar.painted ? 4 : 13) -
-      mortarStain * 29 - edgeShadow * 57
+    const contact = 1 - smooth(0.0015, 0.014, Math.max(0, -distance));
+    const exposure = smooth(-0.23, 0.27, mortarBody + trowel * 0.28);
+    const grainStrength = (grammar.painted ? 0.38 : 1) * (0.4 + exposure * 0.6);
+    const grainRelief = (aggregate.chips * 0.013 + aggregate.pale * 0.017 -
+      aggregate.pits * 0.021 + sand.chips * 0.008 +
+      sand.pale * 0.009 - sand.pits * 0.012) * grainStrength;
+    const mortarHeight = 0.33 + mortarBody * 0.018 + trowel * 0.008 +
+      mortarGrit * 0.012 + mortarDust * 0.003 + grainRelief;
+    const sandTint = (-aggregate.chips * 19 + aggregate.pale * 37 -
+      aggregate.pits * 38 - sand.chips * 14 + sand.pale * 23 -
+      sand.pits * 28) * grainStrength;
+    const mortarColor = rock.mortar.map((channel, i) =>
+      channel * mortarType + mortarBody * 11 + trowel * 8 +
+      mortarGrit * (grammar.painted ? 4 : 13) +
+      mortarDust * (grammar.painted ? 1 : 6) +
+      sandTint * (i === 2 ? 0.93 : 1) - mortarStain * 26 - contact * 42
     );
-    const mortarRoughness = clamp(
-      0.88 + Math.abs(mortarGrit) * 0.09 + mortarStain * 0.14
-    );
+    const mortarRoughness = clamp(0.86 + Math.abs(mortarGrit) * 0.07 +
+      aggregate.chips * 0.1 + aggregate.pits * 0.09 +
+      sand.pits * 0.04 + mortarStain * 0.14);
 
     // Broad mortar pockets are a real material, not dark outlines on a cell.
     if (distance < -0.004) {
@@ -80,7 +131,7 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
         color: mortarColor,
         height: mortarHeight,
         roughness: mortarRoughness,
-        edge: edgeShadow * 0.14,
+        edge: contact * 0.14,
         detail: mortarGrit * 0.13,
       };
     }
