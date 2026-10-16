@@ -11,14 +11,29 @@ function realism(surface, { u, v, pigmentSeed }) {
 }
 
 function painted(surface, { u, v, pigmentSeed }) {
-  const wash = field(u, v, 9, 7, pigmentSeed ^ 0x9718ab32) * 15;
-  const brush = field(u, v, 25, 19, pigmentSeed) * 9;
-  const form = Math.round(surface.height * 6) / 6;
-  const tone = (form - 0.5) * 28 + wash + brush - surface.edge * 10;
+  // Painted volumes, warm highlights and cool recesses rather than photographic
+  // grain with a small saturation/quantization adjustment.
+  const mass = field(u, v, 7, 6, pigmentSeed ^ 0x9718ab32);
+  const washes = field(u, v, 15, 12, pigmentSeed ^ 0x1de63a51);
+  const longBrush = field(u, v, 39, 17, pigmentSeed ^ 0xa8b3c941);
+  const shortBrush = field(u, v, 67, 49, pigmentSeed ^ 0x51b7142d);
+  const luminance = surface.color[0] * 0.299 +
+    surface.color[1] * 0.587 + surface.color[2] * 0.114;
+  const shadow = Math.max(0, (0.53 - surface.height) * 2.4);
+  const highlight = Math.max(0, (surface.height - 0.46) * 1.65);
+  const contour = Math.min(1, surface.edge * 1.3);
+  const brush = mass * 21 + washes * 16 + longBrush * 10 + shortBrush * 3;
+  const volume = highlight * 38 - shadow * 33 - contour * 24;
+  const paintedValue = Math.round((luminance + brush + volume) / 13) * 13;
+  const warm = Math.min(1, highlight + Math.max(0, mass) * 0.27);
+  const cool = Math.min(1, shadow + contour * 0.5);
 
-  return surface.color.map((channel) => {
-    const saturated = (channel - 128) * 1.1 + 128;
-    return clamp(Math.round((saturated + tone) / 7) * 7);
+  return surface.color.map((channel, i) => {
+    const chroma = (channel - luminance) * 1.36;
+    const temperature = [16, 8, -11][i] * warm +
+      [-16, -3, 23][i] * cool;
+
+    return clamp(paintedValue + chroma + temperature);
   });
 }
 
@@ -50,9 +65,9 @@ export const styles = Object.freeze({
   'hand-painted-fantasy': {
     label: 'Hand-Painted Fantasy',
     pixelSize: 1,
-    grammar: { density: 0.72, irregularity: 1.4, edgeWidth: 1.3, detail: 0.6 },
+    grammar: { density: 0.8, irregularity: 1.45, edgeWidth: 1.45, detail: 0.28, painted: true },
     paint: painted,
-    normalStrength: 2.1,
+    normalStrength: 1.4,
   },
   'retro-3d': {
     label: 'Retro 3D',

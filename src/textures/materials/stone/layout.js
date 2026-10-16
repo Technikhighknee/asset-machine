@@ -95,40 +95,48 @@ function signedPolygonDistance(stone, u, v) {
 
 export function buildWall(random, grammar, seed) {
   const tradition = random.pick(traditions);
-  const rows = Math.max(4, Math.round(random.int(...tradition.rows) * (0.75 + 0.25 * grammar.density)));
-  const yBounds = randomBoundaries(random, rows, tradition.heightSpread);
-  const courses = [];
+  const rows = Math.max(4, Math.round(random.int(...tradition.rows) *
+    (0.75 + 0.25 * grammar.density)));
+  const boundaries = randomBoundaries(random, rows, tradition.heightSpread);
+  const stones = [];
+  const mortar = random.range(...tradition.mortar) * grammar.edgeWidth;
+  const offsetX = random.float();
+  const offsetY = random.float();
+  const variation = tradition.name === 'stacked-slate' ? 0.19 : 0.34;
   let nextId = 0;
-  const mortarScale = random.range(...tradition.mortar) * grammar.edgeWidth;
-  const warpOffset = random.float();
 
+  // Courses guide placement, but each stone has its own vertical extent.
+  // Neighbouring stones need not end at the same height: mortar fills gaps.
   for (let row = 0; row < rows; row++) {
-    const count = Math.max(3, Math.round(random.int(...tradition.cols) * Math.sqrt(grammar.density)));
-    const xBounds = randomBoundaries(random, count, tradition.widthSpread);
+    const count = Math.max(3, Math.round(random.int(...tradition.cols) *
+      Math.sqrt(grammar.density)));
+    const xs = randomBoundaries(random, count, tradition.widthSpread);
     const offset = random.float();
-    const stones = [];
+    const courseHeight = boundaries[row + 1] - boundaries[row];
 
     for (let col = 0; col < count; col++) {
-      const x0 = xBounds[col];
-      const x1 = xBounds[col + 1];
-      const height = yBounds[row + 1] - yBounds[row];
-      const width = x1 - x0;
+      const width = xs[col + 1] - xs[col];
       const split = random.float() < tradition.split && width > 0.055;
-      const divide = split ? random.range(0.32, 0.62) : 1;
-      const pieces = split ? [[0, divide], [divide, 1]] : [[0, 1]];
+      const middle = random.range(0.3, 0.7);
+      const pieces = split ? [[0, middle], [middle, 1]] : [[0, 1]];
 
-      for (const [startY, endY] of pieces) {
-        const stoneHeight = height * (endY - startY);
+      for (const [start, end] of pieces) {
+        const baseY = boundaries[row] + start * courseHeight;
+        const height = courseHeight * (end - start);
+        const lift = random.range(-variation, variation) * height;
+        const tall = !split && random.float() < 0.14
+          ? random.range(0.14, 0.42) * height : 0;
+        const y0 = baseY + lift - tall * random.range(0.2, 0.65);
+        const y1 = baseY + height + lift + tall * random.range(0.2, 0.7);
+        const finalHeight = y1 - y0;
 
         stones.push({
           id: nextId++,
-          x0,
-          x1,
-          y0: startY,
-          y1: endY,
+          x0: xs[col] - offset,
+          y0,
           width,
-          height: stoneHeight,
-          polygon: polygon(random, width, stoneHeight, mortarScale, tradition),
+          height: finalHeight,
+          polygon: polygon(random, width, finalHeight, mortar, tradition),
           face: tradition.name,
           orientation: random.range(-0.14, 0.14),
           proud: random.range(-0.027, 0.043),
@@ -137,43 +145,65 @@ export function buildWall(random, grammar, seed) {
         });
       }
     }
-
-    courses.push({ offset, y0: yBounds[row], y1: yBounds[row + 1], xBounds, stones });
   }
 
-  // Independent row offsets and gentle periodic course deformation keep the
-  // wall laid and horizontally supported without repeating one rigid grid.
+  // Periodic spatial indexing allows stones to cross every tile boundary.
+  // The same stone is reused on the opposite edge, rather than copied pixels.
+  const divisions = 24;
+  const cells = Array.from({ length: divisions * divisions }, () => []);
+  const padding = 0.025;
+
+  for (const stone of stones) {
+    for (let dx = -1; dx <= 2; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const left = stone.x0 + dx - padding;
+        const right = stone.x0 + stone.width + dx + padding;
+        const top = stone.y0 + dy - padding;
+        const bottom = stone.y0 + stone.height + dy + padding;
+
+        if (right < 0 || left > 1 || bottom < 0 || top > 1) continue;
+
+        const minX = Math.max(0, Math.floor(left * divisions));
+        const maxX = Math.min(divisions - 1, Math.floor(right * divisions));
+        const minY = Math.max(0, Math.floor(top * divisions));
+        const maxY = Math.min(divisions - 1, Math.floor(bottom * divisions));
+
+        for (let y = minY; y <= maxY; y++) {
+          for (let x = minX; x <= maxX; x++) {
+            cells[y * divisions + x].push({ stone, dx, dy });
+          }
+        }
+      }
+    }
+  }
+
   return {
     type: tradition.name,
     count: nextId,
     sample(u, v) {
-      const courseWarp = field(u, v, 6, 5, seed ^ 0x719d24b3) *
-        (tradition.name === 'stacked-slate' ? 0.004 : 0.012);
-      const vv = wrap(v + warpOffset + courseWarp);
-      let row = 0;
+      const uu = wrap(u + offsetX +
+        field(u, v, 9, 7, seed ^ 0x719d24b3) * 0.007);
+      const vv = wrap(v + offsetY +
+        field(u, v, 7, 9, seed ^ 0x6124eab9) * 0.009);
+      const cx = Math.min(divisions - 1, Math.floor(uu * divisions));
+      const cy = Math.min(divisions - 1, Math.floor(vv * divisions));
+      const candidates = cells[cy * divisions + cx];
+      let best = null;
+      let bestDistance = -Infinity;
 
-      while (row < rows - 1 && vv >= yBounds[row + 1]) row++;
+      for (const { stone, dx, dy } of candidates) {
+        const x = (uu - (stone.x0 + dx)) / stone.width;
+        const y = (vv - (stone.y0 + dy)) / stone.height;
+        const distance = signedPolygonDistance(stone, x, y);
 
-      const course = courses[row];
-      const uu = wrap(u + course.offset);
-      let col = 0;
+        if (distance > bestDistance) {
+          bestDistance = distance;
+          best = { stone, x, y, distance };
+        }
+      }
 
-      while (col < course.xBounds.length - 2 && uu >= course.xBounds[col + 1]) col++;
-
-      const localX = (uu - course.xBounds[col]) /
-        (course.xBounds[col + 1] - course.xBounds[col]);
-      const normalizedY = (vv - course.y0) / (course.y1 - course.y0);
-      const candidates = course.stones.filter((s) => s.x0 === course.xBounds[col]);
-      const stone = candidates.find((s) =>
-        normalizedY >= s.y0 && normalizedY <= s.y1) || candidates.at(-1);
-      const localY = (normalizedY - stone.y0) / (stone.y1 - stone.y0);
-
-      return {
-        stone,
-        x: localX,
-        y: localY,
-        distance: signedPolygonDistance(stone, localX, localY),
-      };
+      // All cells are covered by at least one stone's padded placement.
+      return best;
     },
   };
 }
