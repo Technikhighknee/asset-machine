@@ -10,6 +10,7 @@ const newSeedButton = document.getElementById('new-seed');
 const status = document.getElementById('status');
 const viewport = document.getElementById('viewport');
 const imagePreview = document.getElementById('image-preview');
+const tiledPreview = document.getElementById('tiled-preview');
 const preview = document.querySelector('.preview');
 const viewModeButtons = document.querySelectorAll('[data-preview-mode]');
 
@@ -196,8 +197,13 @@ async function generate(requestId) {
     material.roughnessMap = roughness;
     material.needsUpdate = true;
 
-    imagePreview.src = 'data:image/png;base64,' + maps.albedo;
+    const image = 'data:image/png;base64,' + maps.albedo;
+
+    imagePreview.src = image;
+    tiledPreview.style.backgroundImage = 'url("' + image + '")';
+
     imagePreview.classList.toggle('pixelated', pixelated);
+    tiledPreview.classList.toggle('pixelated', pixelated);
 
     for (const texture of previous) {
       texture?.dispose();

@@ -50,7 +50,17 @@
       </div>
 
       <canvas id="viewport" aria-label="3D material preview"></canvas>
-      <img id="image-preview" alt="Generated albedo texture">
+      <div class="image-comparison">
+        <figure class="image-panel">
+          <figcaption>Single Texture</figcaption>
+          <img id="image-preview" alt="Generated albedo texture">
+        </figure>
+
+        <figure class="image-panel">
+          <figcaption>2 × 2 Tiled</figcaption>
+          <div id="tiled-preview" role="img" aria-label="Texture repeated in a two by two grid"></div>
+        </figure>
+      </div>
       <span class="hint">Drag to rotate · Scroll to zoom</span>
     </main>
   </div>
