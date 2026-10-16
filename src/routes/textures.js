@@ -31,4 +31,24 @@ router.post('/', (req, res, next) => {
   }
 });
 
+router.post('/preview', (req, res, next) => {
+  try {
+    const texture = generateTexture(req.body);
+    const maps = {};
+
+    for (const [name, pixels] of Object.entries(texture.maps)) {
+      maps[name] = encodePng(texture.width, texture.height, pixels).toString('base64');
+    }
+
+    res.json({ maps });
+  } catch (error) {
+    if (error instanceof RangeError || error instanceof TypeError) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    next(error);
+  }
+});
+
 export default router;

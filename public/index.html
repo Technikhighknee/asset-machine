@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Asset Machine</title>
+  <link rel="stylesheet" href="/viewer.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/vendor/three/build/three.module.js",
+        "three/addons/": "/vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <div class="app">
+    <aside class="controls">
+      <h1>Asset Machine</h1>
+
+      <form id="texture-form">
+        <label for="material">Material</label>
+        <select id="material" name="material" required></select>
+
+        <label for="style">Art style</label>
+        <select id="style" name="style" required></select>
+
+        <label for="seed">Seed</label>
+        <input id="seed" name="seed" type="number" min="0" max="4294967295" step="1" value="12345" required>
+
+        <label for="size">Resolution</label>
+        <select id="size" name="size">
+          <option value="128">128 × 128</option>
+          <option value="256" selected>256 × 256</option>
+          <option value="512">512 × 512</option>
+        </select>
+
+        <button id="generate" type="submit">Generate</button>
+      </form>
+
+      <p id="status" role="status" aria-live="polite">Loading…</p>
+    </aside>
+
+    <main class="preview">
+      <canvas id="viewport" aria-label="3D material preview"></canvas>
+      <span class="hint">Drag to rotate · Scroll to zoom</span>
+    </main>
+  </div>
+
+  <script type="module" src="/viewer.js"></script>
+</body>
+</html>

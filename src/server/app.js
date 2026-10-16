@@ -18,6 +18,7 @@ export async function createApp() {
   await mountMiddleware(app, 'before');
   app.use('/api', await createApiRouter());
   app.use('/api', notFound);
+  app.use('/vendor/three', express.static(config.threeDir, { dotfiles: 'deny' }));
   app.use(express.static(config.publicDir, { dotfiles: 'deny' }));
   await mountMiddleware(app, 'after');
   app.use(notFound);

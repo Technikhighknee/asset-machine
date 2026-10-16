@@ -20,6 +20,7 @@ export const config = Object.freeze({
   port,
   logLevel,
   publicDir: join(root, 'public'),
+  threeDir: join(root, 'node_modules', 'three'),
   routesDir: join(root, 'src', 'routes'),
   middlewareDir: join(root, 'src', 'middleware'),
   messagesDir: join(root, 'src', 'messages'),
