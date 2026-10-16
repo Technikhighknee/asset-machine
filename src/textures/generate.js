@@ -19,6 +19,19 @@ function setPixel(image, index, color) {
   image[offset + 3] = 255;
 }
 
+// Keep the outermost texels identical in both axes, including the corner.
+function closeEdges(image, resolution) {
+  const last = resolution - 1;
+  const rowBytes = resolution * 4;
+
+  for (let y = 0; y < last; y++) {
+    const row = y * rowBytes;
+    image.set(image.subarray(row, row + 4), row + last * 4);
+  }
+
+  image.set(image.subarray(0, rowBytes), last * rowBytes);
+}
+
 export function textureCatalog() {
   return {
     materials: Object.entries(materials).map(([id, material]) => ({
@@ -86,6 +99,7 @@ export function generateTexture({
 
   const step = style.pixelSize;
   const resolution = size / step;
+  const period = resolution - 1;
   const pixels = resolution * resolution;
 
   const albedo = new Uint8Array(pixels * 4);
@@ -93,11 +107,11 @@ export function generateTexture({
   const normals = new Uint8Array(pixels * 4);
   const heights = new Float32Array(pixels);
 
-  for (let y = 0; y < resolution; y++) {
-    for (let x = 0; x < resolution; x++) {
+  for (let y = 0; y < period; y++) {
+    for (let x = 0; x < period; x++) {
       const index = y * resolution + x;
-      const u = x / resolution;
-      const v = y / resolution;
+      const u = x / period;
+      const v = y / period;
       const surface = sample(u, v);
 
       const color = style.paint(surface, {
@@ -117,13 +131,13 @@ export function generateTexture({
     }
   }
 
-  for (let y = 0; y < resolution; y++) {
-    for (let x = 0; x < resolution; x++) {
+  for (let y = 0; y < period; y++) {
+    for (let x = 0; x < period; x++) {
       const index = y * resolution + x;
-      const left = heights[y * resolution + (x + resolution - 1) % resolution];
-      const right = heights[y * resolution + (x + 1) % resolution];
-      const up = heights[((y + resolution - 1) % resolution) * resolution + x];
-      const down = heights[((y + 1) % resolution) * resolution + x];
+      const left = heights[y * resolution + (x + period - 1) % period];
+      const right = heights[y * resolution + (x + 1) % period];
+      const up = heights[((y + period - 1) % period) * resolution + x];
+      const down = heights[((y + 1) % period) * resolution + x];
 
       const dx = (left - right) * style.normalStrength;
       const dy = (up - down) * style.normalStrength;
@@ -138,6 +152,10 @@ export function generateTexture({
   }
 
   const maps = { albedo, normal: normals, roughness };
+
+  for (const image of Object.values(maps)) {
+    closeEdges(image, resolution);
+  }
 
   if (step === 1) {
     return { width: size, height: size, maps };
