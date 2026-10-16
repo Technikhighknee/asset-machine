@@ -144,14 +144,14 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
     const chippedEdge = field(x, y, 11, 9, p.structureSeed ^ 0x10933ada) * 0.0034;
     const inset = distance + chippedEdge;
     const inRock = smooth(-0.0018, 0.0015, inset);
-    const bevel = smooth(0, 0.014, inset);
+    const bevel = smooth(0, 0.0045 * grammar.edgeWidth, inset);
 
     const axisX = Math.cos(p.fractureAngle);
     const axisY = Math.sin(p.fractureAngle);
     const localX = x - 0.5;
     const localY = y - 0.5;
     const cutCoordinate = localX * axisX + localY * axisY + p.fractureOffset;
-    const cut = smooth(-0.058, 0.055, cutCoordinate + faceNoise * 0.08) - 0.5;
+    const cut = smooth(-0.020, 0.024, cutCoordinate + faceNoise * 0.08) - 0.5;
     const bedding = Math.sin(
       (y * (5.3 + p.blockRelief * 2.6) + faceNoise * 0.27 +
         stone.orientation) * Math.PI * 2
@@ -160,7 +160,7 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
       ? bedding * (stone.face === 'stacked-slate' ? 0.025 : 0.015) : 0;
     const secondCoord = localX * Math.cos(p.secondAngle) +
       localY * Math.sin(p.secondAngle) + p.secondOffset;
-    const secondCut = smooth(-0.045, 0.065, secondCoord + fractured * 0.08) - 0.5;
+    const secondCut = smooth(-0.023, 0.027, secondCoord + fractured * 0.08) - 0.5;
     const chips = smooth(0.10, 0.43, fractured * 0.68 + fine * 0.32) * stone.wear;
     const porous = smooth(0.13, 0.53, fine * 0.45 + fractured * 0.55);
     const crack = p.crack
@@ -177,7 +177,7 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
       fine * (grammar.painted ? 0.002 : 0.017) +
       grain * (grammar.painted ? 0.001 : 0.008) +
       strata - chips * 0.048 - porous * 0.029 - crack * 0.056;
-    const stoneHeight = shape * (0.69 + bevel * 0.31);
+    const stoneHeight = shape * (0.85 + bevel * 0.15);
     const height = mix(mortarHeight, stoneHeight, inRock);
 
     const mineralZones = fbm(x, y, 7, 8, p.pigmentSeed, 4);
@@ -192,7 +192,7 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
       weatherLevel * 0.24;
     const mineral = mineralZones * 20 * broadContrast +
       speckles * 11 * grammar.detail + lamina;
-    const cavity = 1 - smooth(0.0005, 0.012, g);
+    const cavity = 1 - smooth(0.0005, 0.0045 * grammar.edgeWidth, g);
 
     const color = p.color.map((channel, i) => {
       const stoneColor = channel +

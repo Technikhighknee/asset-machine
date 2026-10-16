@@ -13,34 +13,41 @@ const traditions = [
 ];
 
 function outline(random, width, height, gap, tradition) {
-  const pad = () => gap * random.range(0.75, 1.5);
+  const pad = () => gap * random.range(0.58, 1.35);
   const left = pad();
   const right = pad();
   const top = pad();
   const bottom = pad();
   const chamfer = random.range(...tradition.chamfer);
-  const chipX = Math.min((width - left - right) * chamfer, height * 0.27);
-  const chipY = Math.min((height - top - bottom) * chamfer, width * 0.2);
-  const jag = Math.min(gap * (1.6 + tradition.slope), height * 0.1);
-  const shake = () => random.range(-jag, jag);
-  const x = (value) => clamp(value / width, 0.009, 0.991);
-  const y = (value) => clamp(value / height, 0.009, 0.991);
+  const cornerX = Math.min((width - left - right) * chamfer, height * 0.30);
+  const cornerY = Math.min((height - top - bottom) * chamfer, width * 0.19);
+  const edgeX = Math.min(width * 0.055, height * 0.18);
+  const edgeY = Math.min(height * 0.09, width * 0.055);
+  const x = (v) => clamp(v / width, 0.008, 0.992);
+  const y = (v) => clamp(v / height, 0.008, 0.992);
+  const jitter = (n) => random.range(-n, n);
+  const notch = () => random.float() < 0.17 ? random.range(0.2, 0.95) : 0;
 
+  // Bedded resting surfaces, but individually fractured sides and corners.
   return [
-    [x(left + chipX), y(top + shake())],
-    [x(left + width * 0.31 + shake()), y(top + shake())],
-    [x(left + width * 0.66 + shake()), y(top + shake())],
-    [x(width - right - chipX), y(top + shake())],
-    [x(width - right + shake()), y(top + chipY)],
-    [x(width - right + shake()), y(height * 0.53 + shake())],
-    [x(width - right + shake()), y(height - bottom - chipY)],
-    [x(width - right - chipX), y(height - bottom + shake())],
-    [x(width * 0.68 + shake()), y(height - bottom + shake())],
-    [x(width * 0.32 + shake()), y(height - bottom + shake())],
-    [x(left + chipX), y(height - bottom + shake())],
-    [x(left + shake()), y(height - bottom - chipY)],
-    [x(left + shake()), y(height * 0.48 + shake())],
-    [x(left + shake()), y(top + chipY)],
+    [x(left + cornerX), y(top + jitter(edgeY * 0.8))],
+    [x(left + width * 0.22), y(top + jitter(edgeY))],
+    [x(left + width * 0.49), y(top + edgeY * notch() + jitter(edgeY * 0.6))],
+    [x(width - right - width * 0.23), y(top + jitter(edgeY))],
+    [x(width - right - cornerX), y(top + jitter(edgeY * 0.8))],
+    [x(width - right + jitter(edgeX)), y(top + cornerY)],
+    [x(width - right + jitter(edgeX)), y(height * 0.29)],
+    [x(width - right - edgeX * notch() + jitter(edgeX * 0.6)), y(height * 0.61)],
+    [x(width - right + jitter(edgeX)), y(height - bottom - cornerY)],
+    [x(width - right - cornerX), y(height - bottom + jitter(edgeY * 0.8))],
+    [x(width * 0.72), y(height - bottom + jitter(edgeY * 0.45))],
+    [x(width * 0.46), y(height - bottom - edgeY * notch() + jitter(edgeY))],
+    [x(width * 0.20), y(height - bottom + jitter(edgeY * 0.6))],
+    [x(left + cornerX), y(height - bottom + jitter(edgeY * 0.8))],
+    [x(left + jitter(edgeX)), y(height - bottom - cornerY)],
+    [x(left - jitter(edgeX * 0.7)), y(height * 0.62)],
+    [x(left + edgeX * notch() + jitter(edgeX * 0.6)), y(height * 0.34)],
+    [x(left + jitter(edgeX)), y(top + cornerY)],
   ];
 }
 
@@ -105,10 +112,24 @@ export function buildWall(random, grammar, seed) {
   }
 
   function sections(count) {
-    const weights = Array.from({ length: count }, () => random.range(0.7, 1.3));
-    const total = weights.reduce((a, b) => a + b);
-    const widths = weights.map((v) => v / total);
-    return widths;
+    // Select a plausible stock of masonry stones, not arbitrary thin slices.
+    let widths = [];
+
+    for (let attempt = 0; attempt < 80; attempt++) {
+      const weights = Array.from({ length: count }, () => {
+        const base = random.range(0.8, 1.35);
+        const category = random.float();
+
+        return base * (category < 0.16 ? 1.45 : category < 0.30 ? 0.78 : 1);
+      });
+      const total = weights.reduce((a, b) => a + b);
+      widths = weights.map((value) => value / total);
+
+      if (widths.every((value) => value >= minWidth * 1.04 &&
+        value <= maxWidth * 0.97)) return widths;
+    }
+
+    return Array.from({ length: count }, () => 1 / count);
   }
 
   // The first, partly buried lift is mirrored above the wall. Its stones
@@ -136,7 +157,7 @@ export function buildWall(random, grammar, seed) {
   for (let course = 0; course < 18; course++) {
     const average = skyline.reduce((a, b) => a + b, 0) / bins;
     if (average > 0.865) break;
-    const count = random.int(7, 11);
+    const count = random.int(7, 10);
     const widths = sections(count);
     const edgeCandidates = [];
 
@@ -155,7 +176,7 @@ export function buildWall(random, grammar, seed) {
 
     edgeCandidates.sort((a, b) => a.aligned - b.aligned);
     let position = edgeCandidates[0].offset;
-    const target = average + random.range(0.065, 0.09);
+    const target = average + random.range(0.071, 0.099);
     const placements = [];
 
     for (const w of widths) {
@@ -173,13 +194,14 @@ export function buildWall(random, grammar, seed) {
       }
 
       const y0 = maxSupport + mortar * random.range(0.65, 1.25);
-      const desiredHeight = target + random.range(-0.027, 0.027) - y0;
-      const height = Math.min(upperLimit - y0,
-        clamp(desiredHeight, minHeight, tradition.height[1] * 1.15));
+      const desiredHeight = target + random.range(-0.032, 0.034) - y0;
+      const lower = Math.max(minHeight, length / (tradition.aspect[1] + 0.15));
+      const upper = Math.min(upperLimit - y0, tradition.height[1] * 1.15,
+        length / 0.78);
+      const height = clamp(desiredHeight, lower, upper);
 
-      if (height >= minHeight && length >= minWidth * 0.8 &&
-        length <= maxWidth * 1.2 && length / height >= 0.72 &&
-        length / height <= tradition.aspect[1] + 0.35) {
+      if (lower <= upper && length >= minWidth * 0.95 &&
+        length <= maxWidth * 1.07) {
         placements.push({ start, end, y0, height });
       }
       position += w;
@@ -196,6 +218,96 @@ export function buildWall(random, grammar, seed) {
         previousIds[index] = stone.id;
       }
     }
+  }
+
+  // Close only substantial supported pockets with medium stones. The
+  // remaining irregular gaps belong to mortar, not tiny filler splinters.
+  const grid = 128;
+  const occupied = new Uint8Array(grid * grid);
+
+  function mark(stone) {
+    for (const dx of [-1, 0, 1]) {
+      for (const dy of [0, 1]) {
+        if (dy && stone.y0 >= 0) continue;
+        const left = Math.max(0, Math.ceil((stone.x0 + dx) * grid));
+        const right = Math.min(grid, Math.floor((stone.x0 + dx + stone.width) * grid));
+        const top = Math.max(0, Math.ceil((stone.y0 + dy) * grid));
+        const bottom = Math.min(grid, Math.floor((stone.y0 + dy + stone.height) * grid));
+
+        for (let y = top; y < bottom; y++) {
+          for (let x = left; x < right; x++) occupied[y * grid + x] = 1;
+        }
+      }
+    }
+  }
+
+  for (const stone of stones) mark(stone);
+
+  function empty(x0, y0, width, height) {
+    for (let y = y0; y < y0 + height; y++) {
+      for (let x = x0; x < x0 + width; x++) {
+        if (occupied[y * grid + x]) return false;
+      }
+    }
+
+    return true;
+  }
+
+  for (let iteration = 0; iteration < 18; iteration++) {
+    const choices = [];
+
+    for (let attempt = 0; attempt < 1200; attempt++) {
+      const width = random.int(11, 23);
+      const height = random.int(8, 17);
+      const ratio = width / height;
+
+      if (ratio < 0.8 || ratio > tradition.aspect[1] + 0.2) continue;
+
+      const x = random.int(0, grid - width);
+      const y = random.int(8, grid - height - 6);
+
+      if (!empty(x, y, width, height)) continue;
+
+      const x0 = x / grid;
+      const y0 = y / grid;
+      const w = width / grid;
+      const h = height / grid;
+      const collides = stones.some((other) => [-1, 0, 1].some((dx) =>
+        [0, 1].some((dy) => {
+          const bx = other.x0 + dx;
+          const by = other.y0 + dy;
+
+          return Math.min(x0 + w, bx + other.width) - Math.max(x0, bx) > 1e-7 &&
+            Math.min(y0 + h, by + other.height) - Math.max(y0, by) > 1e-7;
+        })));
+
+      if (collides) continue;
+
+      let support = 0;
+
+      for (let b = x; b < x + width; b++) {
+        support += occupied[(y - 2) * grid + b];
+      }
+
+      if (support < width * 0.32) continue;
+
+      choices.push({
+        x,
+        y,
+        width,
+        height,
+        quality: width * height + random.range(0, 30),
+      });
+    }
+
+    if (!choices.length) break;
+
+    choices.sort((a, b) => b.quality - a.quality);
+    const chosen = choices[0];
+    const stone = place(chosen.x / grid, chosen.width / grid,
+      chosen.y / grid, chosen.height / grid);
+
+    mark(stone);
   }
 
   // Spatially indexed periodic copies support distance-to-stone and mortar
