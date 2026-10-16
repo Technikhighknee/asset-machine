@@ -47,8 +47,8 @@ const material = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   roughness: 1,
   metalness: 0,
-  displacementScale: 0.02,
-  displacementBias: -0.01,
+  displacementScale: 0.045,
+  displacementBias: -0.0225,
 });
 
 const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 512, 384), material);
