@@ -52,3 +52,26 @@ export function field(u, v, columns, rows, seed) {
 
   return (top * (1 - ty) + bottom * ty) * 2 - 1;
 }
+
+export function fbm(u, v, columns, rows, seed, octaves = 4) {
+  let sum = 0;
+  let amplitude = 1;
+  let weight = 0;
+
+  for (let octave = 0; octave < octaves; octave++) {
+    const frequency = 2 ** octave;
+
+    sum += field(
+      u,
+      v,
+      Math.max(1, Math.round(columns * frequency)),
+      Math.max(1, Math.round(rows * frequency)),
+      seed ^ Math.imul(octave + 1, 0x9e3779b9),
+    ) * amplitude;
+
+    weight += amplitude;
+    amplitude *= 0.5;
+  }
+
+  return sum / weight;
+}

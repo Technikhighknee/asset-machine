@@ -3,22 +3,22 @@ import { field } from './random.js';
 const clamp = (value) => Math.max(0, Math.min(255, value));
 
 function realism(surface, { u, v, pigmentSeed }) {
-  const fine = field(u, v, 69, 73, pigmentSeed) * 11;
-  const broad = field(u, v, 9, 11, pigmentSeed ^ 0x89144d31) * 12;
-  const light = (surface.height - 0.5) * 24 + surface.detail * 8 + fine + broad;
+  const broad = field(u, v, 7, 9, pigmentSeed ^ 0x89144d31) * 8;
+  const fine = field(u, v, 43, 39, pigmentSeed) * 4;
+  const tone = (surface.height - 0.5) * 15 + broad + fine - surface.edge * 7;
 
-  return surface.color.map((channel) => clamp(channel + light - surface.edge * 15));
+  return surface.color.map((channel) => clamp(channel + tone));
 }
 
 function painted(surface, { u, v, pigmentSeed }) {
-  const strokes = field(u, v, 28, 19, pigmentSeed) * 20;
-  const brush = field(u, v, 8, 7, pigmentSeed ^ 0x9718ab32) * 24;
-  const shape = Math.round((surface.height + surface.detail * 0.15) * 5) / 5;
-  const lighting = (shape - 0.5) * 42 + strokes + brush - surface.edge * 32;
+  const wash = field(u, v, 9, 7, pigmentSeed ^ 0x9718ab32) * 15;
+  const brush = field(u, v, 25, 19, pigmentSeed) * 9;
+  const form = Math.round(surface.height * 6) / 6;
+  const tone = (form - 0.5) * 28 + wash + brush - surface.edge * 10;
 
   return surface.color.map((channel) => {
-    const saturated = (channel - 128) * 1.17 + 128;
-    return clamp(Math.round((saturated + lighting) / 6) * 6);
+    const saturated = (channel - 128) * 1.1 + 128;
+    return clamp(Math.round((saturated + tone) / 7) * 7);
   });
 }
 
@@ -30,11 +30,11 @@ const bayer = [
 ];
 
 function retro(surface, { x, y }) {
-  const dither = (bayer[y % 4][x % 4] / 15 - 0.5) * 22;
-  const light = (surface.height - 0.5) * 28 - surface.edge * 20;
+  const dither = (bayer[y % 4][x % 4] / 15 - 0.5) * 20;
+  const tone = (surface.height - 0.5) * 20 - surface.edge * 12;
 
   return surface.color.map((channel) => {
-    const value = (channel - 128) * 1.08 + 128 + light + dither;
+    const value = (channel - 128) * 1.05 + 128 + tone + dither;
     return clamp(Math.round(value / 32) * 32);
   });
 }
