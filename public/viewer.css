@@ -94,6 +94,65 @@ button:disabled {
   height: 100%;
 }
 
+.view-modes {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  z-index: 1;
+  display: flex;
+  gap: 3px;
+  padding: 4px;
+  border: 1px solid #454b55;
+  border-radius: 8px;
+  background: #252a30;
+  transform: translateX(-50%);
+}
+
+.view-modes button {
+  width: auto;
+  min-width: 80px;
+  margin: 0;
+  padding: 8px 16px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: #bfc4ce;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.view-modes button[aria-pressed="true"] {
+  background: #456bb4;
+  color: #fff;
+}
+
+#image-preview {
+  display: none;
+  width: min(70%, 640px);
+  height: auto;
+  max-height: calc(100% - 150px);
+  object-fit: contain;
+}
+
+#image-preview.pixelated {
+  image-rendering: pixelated;
+}
+
+.preview.image-mode {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.preview.image-mode #viewport,
+.preview.image-mode .hint {
+  display: none;
+}
+
+.preview.image-mode #image-preview {
+  display: block;
+}
+
 .hint {
   position: absolute;
   bottom: 18px;

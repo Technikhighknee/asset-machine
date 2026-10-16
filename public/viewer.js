@@ -9,6 +9,9 @@ const sizeInput = document.getElementById('size');
 const newSeedButton = document.getElementById('new-seed');
 const status = document.getElementById('status');
 const viewport = document.getElementById('viewport');
+const imagePreview = document.getElementById('image-preview');
+const preview = document.querySelector('.preview');
+const viewModeButtons = document.querySelectorAll('[data-preview-mode]');
 
 const renderer = new THREE.WebGLRenderer({
   canvas: viewport,
@@ -65,6 +68,18 @@ renderer.setAnimationLoop(() => {
   controls.update();
   renderer.render(scene, camera);
 });
+
+function setPreviewMode(mode) {
+  preview.classList.toggle('image-mode', mode === 'image');
+
+  for (const button of viewModeButtons) {
+    button.setAttribute('aria-pressed', String(button.dataset.previewMode === mode));
+  }
+}
+
+for (const button of viewModeButtons) {
+  button.addEventListener('click', () => setPreviewMode(button.dataset.previewMode));
+}
 
 function setStatus(message) {
   status.textContent = message;
@@ -180,6 +195,9 @@ async function generate(requestId) {
     material.normalMap = normal;
     material.roughnessMap = roughness;
     material.needsUpdate = true;
+
+    imagePreview.src = 'data:image/png;base64,' + maps.albedo;
+    imagePreview.classList.toggle('pixelated', pixelated);
 
     for (const texture of previous) {
       texture?.dispose();
