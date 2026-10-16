@@ -1,179 +1,164 @@
-// Stones are placed in staggered courses before any surface is sampled.
-// Every course is periodic horizontally; the course sequence is periodic vertically.
+import { fbm } from '../../random.js';
+
 const wrap = (value) => ((value % 1) + 1) % 1;
 
-function proportions(count, random, spread) {
-  const weights = Array.from({ length: count }, () => random.range(1 - spread, 1 + spread));
-  const total = weights.reduce((sum, weight) => sum + weight, 0);
-  const edges = [0];
-
-  for (const weight of weights) {
-    edges.push(edges.at(-1) + weight / total);
-  }
-
-  edges[edges.length - 1] = 1;
-  return edges;
-}
-
-function stoneOutline(random, type) {
-  // A polygon inside one masonry slot. Wide load-bearing bottoms and
-  // softened, sometimes chipped corners keep it from reading as Voronoi cells.
-  const round = type === 'fieldstone';
-  const corner = round ? random.range(0.12, 0.26) : random.range(0.045, 0.14);
-  const rim = round ? random.range(0.022, 0.065) : random.range(0.008, 0.026);
-  const tilt = random.range(-0.06, 0.06);
-  const wobble = () => random.range(-0.035, 0.035);
-
-  const limit = (value) => Math.max(0.01, Math.min(0.99, value));
+function outline(random, fieldstone) {
+  const cut = () => random.range(fieldstone ? 0.095 : 0.03, fieldstone ? 0.2 : 0.14);
+  const inset = () => random.range(fieldstone ? 0.007 : 0.004, fieldstone ? 0.035 : 0.02);
+  const jitter = () => random.range(-0.085, 0.085);
+  const limit = (value) => Math.max(0.005, Math.min(0.995, value));
+  const [tl, tr, br, bl] = [cut(), cut(), cut(), cut()];
+  const [top, bottom, left, right] = [inset(), inset(), inset(), inset()];
 
   return [
-    [corner, rim + tilt + wobble()],
-    [0.47 + wobble(), rim + wobble()],
-    [1 - corner, rim - tilt + wobble()],
-    [1 - rim + wobble(), corner],
-    [1 - rim + wobble(), 0.52 + wobble()],
-    [1 - rim + wobble(), 1 - corner],
-    [1 - corner, 1 - rim + tilt + wobble()],
-    [0.52 + wobble(), 1 - rim + wobble()],
-    [corner, 1 - rim - tilt + wobble()],
-    [rim + wobble(), 1 - corner],
-    [rim + wobble(), 0.48 + wobble()],
-    [rim + wobble(), corner],
-  ].map(([x, y]) => [limit(x), limit(y)]);
+    [tl, limit(top + jitter())],
+    [limit(0.39 + jitter()), limit(top + jitter())],
+    [limit(0.68 + jitter()), limit(top + jitter())],
+    [1 - tr, limit(top + jitter())],
+    [limit(1 - right + jitter()), tr],
+    [limit(1 - right + jitter()), limit(0.42 + jitter())],
+    [limit(1 - right + jitter()), limit(0.68 + jitter())],
+    [1 - br, limit(1 - bottom + jitter())],
+    [limit(0.66 + jitter()), limit(1 - bottom + jitter())],
+    [limit(0.29 + jitter()), limit(1 - bottom + jitter())],
+    [bl, limit(1 - bottom + jitter())],
+    [limit(left + jitter()), 1 - bl],
+    [limit(left + jitter()), limit(0.66 + jitter())],
+    [limit(left + jitter()), limit(0.34 + jitter())],
+    [limit(left + jitter()), tl],
+  ];
 }
 
-function makeStone(random, x0, x1, id, type) {
+function stone(random, id, type) {
   return {
     id,
-    x0,
-    x1,
-    width: x1 - x0,
-    outline: stoneOutline(random, type),
-    lift: random.range(-0.035, 0.035),
-    tiltX: random.range(-0.055, 0.055),
-    tiltY: random.range(-0.055, 0.055),
-    facet: random.range(0.4, 1),
-    chip: random.range(0.1, 0.75),
+    polygon: outline(random, type === 'fieldstone'),
+    protrusion: random.range(-0.025, 0.035),
+    slopeX: random.range(-0.035, 0.035),
+    slopeY: random.range(-0.028, 0.028),
+    shape: random.range(0.6, 1.25),
+    wear: random.range(0.3, 1),
   };
 }
 
-function polygonDistance(stone, x, y, height) {
-  // Signed distance to the actual stone polygon in tile units.
-  // Local slot coords are used only to select its geometry.
-  const outline = stone.outline;
+function polygonDistance(vertices, x, y, width, height) {
   let inside = false;
-  let distanceSquared = Infinity;
+  let squared = Infinity;
+  const px = x * width;
+  const py = y * height;
 
-  for (let i = 0, j = outline.length - 1; i < outline.length; j = i++) {
-    const ax = outline[j][0] * stone.width;
-    const ay = outline[j][1] * height;
-    const bx = outline[i][0] * stone.width;
-    const by = outline[i][1] * height;
-    const px = x * stone.width;
-    const py = y * height;
-    const dx = bx - ax;
-    const dy = by - ay;
-    const fraction = Math.max(0, Math.min(1,
-      ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy)
-    ));
-    const qx = ax + fraction * dx - px;
-    const qy = ay + fraction * dy - py;
-    distanceSquared = Math.min(distanceSquared, qx * qx + qy * qy);
+  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+    const ax = vertices[j][0] * width;
+    const ay = vertices[j][1] * height;
+    const bx = vertices[i][0] * width;
+    const by = vertices[i][1] * height;
+    const vx = bx - ax;
+    const vy = by - ay;
+    const t = Math.max(0, Math.min(1, ((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy)));
+    const dx = px - ax - t * vx;
+    const dy = py - ay - t * vy;
 
-    if ((ay > py) !== (by > py) && px < (bx - ax) * (py - ay) / (by - ay) + ax) {
+    squared = Math.min(squared, dx * dx + dy * dy);
+
+    if ((ay > py) !== (by > py) && px < ax + vx * (py - ay) / vy) {
       inside = !inside;
     }
   }
 
-  return (inside ? 1 : -1) * Math.sqrt(distanceSquared);
+  return Math.sqrt(squared) * (inside ? 1 : -1);
 }
 
-export function buildWall(structure, grammar) {
-  const type = structure.pick(['coursed', 'rough', 'fieldstone']);
-  const count = Math.max(3, Math.round(structure.int(7, 10) * grammar.density));
-  const heights = proportions(count, structure, type === 'rough' ? 0.48 : 0.29);
-  const courses = [];
-  const verticalOffset = structure.range(0.025, 0.09);
-  const boundaries = Array.from({ length: count - 1 }, (_, index) => {
-    const steps = structure.int(5, 12);
-    const amplitude = Math.min(heights[index + 1] - heights[index],
-      heights[index + 2] - heights[index + 1]) * (type === 'coursed' ? 0.1 : 0.2);
+export function buildWall(random, grammar, seed) {
+  const type = random.pick(['rubble', 'fieldstone']);
+  const target = (type === 'fieldstone' ? 0.028 : 0.038) / grammar.density;
+  const stones = [];
+  const offsetX = random.float();
+  const offsetY = random.float();
+  let nextId = 0;
 
-    return {
-      phase: structure.float(),
-      values: Array.from({ length: steps }, () => structure.range(-amplitude, amplitude)),
-    };
-  });
+  // Partition the wall into load-bearing stones before generating any surface detail.
+  // Big regions are split before small ones; neighboring pieces share their supports.
+  function lay(region, depth = 0) {
+    const width = region.x1 - region.x0;
+    const height = region.y1 - region.y0;
+    const aspect = width / height;
+    const finished = depth > 2 && aspect > 0.5 && aspect < 2.7 &&
+      width * height < target * random.range(0.55, 1.7);
 
-  function courseBoundary(index, u) {
-    if (index === 0) return 0;
-    if (index === count) return 1;
-
-    const boundary = boundaries[index - 1];
-    const value = wrap(u + boundary.phase) * boundary.values.length;
-    const cell = Math.floor(value);
-    const t = value - cell;
-    const next = boundary.values[(cell + 1) % boundary.values.length];
-    const blend = Math.max(0, Math.min(1, (t - 0.72) / 0.28));
-    const eased = blend * blend * (3 - 2 * blend);
-
-    return heights[index] + boundary.values[cell] * (1 - eased) + next * eased;
-  }
-
-  let identity = 0;
-
-  for (let row = 0; row < count; row++) {
-    const y0 = heights[row];
-    const y1 = heights[row + 1];
-    const amount = Math.max(3, Math.round(
-      structure.int(type === 'rough' ? 5 : 4, type === 'rough' ? 9 : 7) * grammar.density
-    ));
-    const widths = proportions(amount, structure, type === 'rough' ? 0.73 : 0.48);
-    const shift = structure.float();
-    const slots = [];
-
-    for (let col = 0; col < amount; col++) {
-      const x0 = widths[col];
-      const x1 = widths[col + 1];
-      const filler = type === 'rough' && (x1 - x0) > 0.08 && structure.float() < 0.21;
-
-      if (filler) {
-        const divide = structure.range(0.42, 0.58);
-        const middle = y0 + (y1 - y0) * divide;
-        slots.push({ x1, split: middle,
-          lower: makeStone(structure, x0, x1, identity++, type),
-          upper: makeStone(structure, x0, x1, identity++, type),
-        });
-      } else {
-        slots.push({ x1, single: makeStone(structure, x0, x1, identity++, type) });
-      }
+    if (finished || depth >= 10 || (width < 0.09 && height < 0.1)) {
+      stones.push({ ...stone(random, nextId++, type), ...region });
+      return;
     }
 
-    courses.push({ index: row, y1, y0, shift, slots });
+    const horizontal = height > width * 1.3 ||
+      (width <= height * 1.8 && random.float() < 0.53);
+    const fraction = random.range(0.32, 0.68);
+
+    if (horizontal) {
+      const split = region.y0 + height * fraction;
+      lay({ ...region, y1: split }, depth + 1);
+      lay({ ...region, y0: split }, depth + 1);
+    } else {
+      const split = region.x0 + width * fraction;
+      lay({ ...region, x1: split }, depth + 1);
+      lay({ ...region, x0: split }, depth + 1);
+    }
+  }
+
+  lay({ x0: 0, x1: 1, y0: 0, y1: 1 });
+
+  // Pinnings are small real stones, deliberately fitted into some mortar pockets.
+  const corners = new Set();
+  const pinnings = [];
+
+  for (const large of stones) {
+    for (const [x, y] of [[large.x0, large.y0], [large.x0, large.y1],
+      [large.x1, large.y0], [large.x1, large.y1]]) {
+      const key = Math.round(x * 100000) + ':' + Math.round(y * 100000);
+      if (corners.has(key)) continue;
+      corners.add(key);
+      if (random.float() >= 0.48) continue;
+
+      pinnings.push({
+        x: wrap(x),
+        y: wrap(y),
+        radius: random.range(0.009, 0.024),
+        stone: stone(random, nextId++, 'fieldstone'),
+      });
+    }
   }
 
   return {
     type,
-    count: identity,
+    count: nextId,
     sample(u, v) {
-      const yy = wrap(v + verticalOffset);
-      const xxWorld = wrap(u);
-      const course = courses.find((row) => yy < courseBoundary(row.index + 1, xxWorld)) || courses.at(-1);
-      const ceiling = courseBoundary(course.index, xxWorld);
-      const floor = courseBoundary(course.index + 1, xxWorld);
-      const height = floor - ceiling;
-      const xx = wrap(u + course.shift);
-      const slot = course.slots.find((cell) => xx < cell.x1) || course.slots.at(-1);
-      const vertical = (yy - ceiling) / height;
-      const split = slot.split ? (slot.split - course.y0) / (course.y1 - course.y0) : 0;
-      const stone = slot.single || (vertical < split ? slot.lower : slot.upper);
-      const x = (xx - stone.x0) / stone.width;
-      const y = slot.single
-        ? vertical
-        : stone === slot.lower ? vertical / split : (vertical - split) / (1 - split);
-      const stoneHeight = slot.single ? height : height * (stone === slot.lower ? split : 1 - split);
+      // Periodic global deformation, shared by every stone and mortar seam.
+      const x = wrap(u + offsetX + fbm(u, v, 8, 7, seed ^ 0x5171aef2, 3) * 0.013);
+      const y = wrap(v + offsetY + fbm(u, v, 7, 9, seed ^ 0x5a2f3197, 3) * 0.017);
+      const large = stones.find((s) => x >= s.x0 && x < s.x1 && y >= s.y0 && y < s.y1);
+      const width = large.x1 - large.x0;
+      const height = large.y1 - large.y0;
+      const localX = (x - large.x0) / width;
+      const localY = (y - large.y0) / height;
+      const distance = polygonDistance(large.polygon, localX, localY, width, height);
 
-      return { stone, x, y, distance: polygonDistance(stone, x, y, stoneHeight) };
+      if (distance < 0.002) {
+        for (const pin of pinnings) {
+          const dx = wrap(x - pin.x + 0.5) - 0.5;
+          const dy = wrap(y - pin.y + 0.5) - 0.5;
+          if (Math.abs(dx) > pin.radius || Math.abs(dy) > pin.radius) continue;
+
+          const sx = 0.5 + dx / (pin.radius * 2);
+          const sy = 0.5 + dy / (pin.radius * 2);
+          const d = polygonDistance(pin.stone.polygon, sx, sy, pin.radius * 2, pin.radius * 2);
+
+          if (d > distance && d > -0.002) {
+            return { stone: pin.stone, x: sx, y: sy, distance: d };
+          }
+        }
+      }
+
+      return { stone: large, x: localX, y: localY, distance };
     },
   };
 }

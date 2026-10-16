@@ -1,86 +1,107 @@
 import { field, fbm, hash } from '../../random.js';
 
 const clamp = (value) => Math.max(0, Math.min(1, value));
-const smooth = (a, b, value) => {
+const mix = (a, b, t) => a + (b - a) * t;
+
+function smooth(a, b, value) {
   const t = clamp((value - a) / (b - a));
   return t * t * (3 - 2 * t);
-};
+}
 
-// Cohesive geology: one wall is made from one kind of stone, not five unrelated colors.
-const rockFamilies = [
-  { base: [145, 139, 125], mineral: [165, 155, 133], mortar: [113, 106, 93] },
-  { base: [135, 138, 135], mineral: [154, 147, 131], mortar: [108, 110, 107] },
-  { base: [153, 132, 108], mineral: [174, 149, 118], mortar: [115, 103, 88] },
-  { base: [127, 123, 115], mineral: [145, 139, 124], mortar: [98, 96, 90] },
+const geology = [
+  { stone: [159, 145, 125], inclusion: [173, 152, 125], mortar: [123, 116, 103] },
+  { stone: [145, 145, 136], inclusion: [161, 157, 146], mortar: [117, 117, 108] },
+  { stone: [163, 138, 108], inclusion: [172, 146, 118], mortar: [118, 107, 95] },
+  { stone: [142, 133, 119], inclusion: [158, 141, 120], mortar: [112, 106, 98] },
 ];
 
 export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
-  const geology = pigment.pick(rockFamilies);
-  const joint = structure.range(0.0012, 0.0028) * grammar.edgeWidth;
-  const bevel = structure.range(0.009, 0.021) * grammar.edgeWidth;
-  const age = weather.range(0.12, 0.43);
-  const mineralStrength = pigment.range(0.45, 1);
+  const family = pigment.pick(geology);
+  const seam = structure.range(0.001, 0.002) * grammar.edgeWidth;
+  const bevelWidth = structure.range(0.006, 0.014) * grammar.edgeWidth;
+  const age = weather.range(0.05, 0.3);
   const profiles = new Map();
 
   function identity(stone) {
-    let p = profiles.get(stone.id);
+    if (profiles.has(stone.id)) return profiles.get(stone.id);
 
-    if (!p) {
-      p = {
-        tone: (hash(stone.id, 1, seeds.pigment) - 0.5) * 20,
-        warmth: (hash(stone.id, 2, seeds.pigment) - 0.5) * 7,
-        vein: hash(stone.id, 3, seeds.structure) > 0.64,
-        roughness: hash(stone.id, 4, seeds.structure) * 0.09,
-        weather: hash(stone.id, 5, seeds.weather),
-        rockSeed: seeds.structure ^ Math.imul(stone.id + 1, 0x9e3779b9),
-        colorSeed: seeds.pigment ^ Math.imul(stone.id + 1, 0x85ebca6b),
-      };
-      profiles.set(stone.id, p);
-    }
+    const facetAngle = hash(stone.id, 11, seeds.structure) * Math.PI * 2;
+    const fissureAngle = facetAngle + (hash(stone.id, 12, seeds.structure) - 0.5) * 1.3;
+    const data = {
+      facetX: Math.cos(facetAngle),
+      facetY: Math.sin(facetAngle),
+      facetOffset: (hash(stone.id, 13, seeds.structure) - 0.5) * 0.35,
+      facetDepth: 0.028 + hash(stone.id, 14, seeds.structure) * 0.045,
+      fissureX: Math.cos(fissureAngle),
+      fissureY: Math.sin(fissureAngle),
+      fractured: hash(stone.id, 15, seeds.structure) > 0.52,
+      offset: (hash(stone.id, 1, seeds.pigment) - 0.5) * 38,
+      warmth: (hash(stone.id, 2, seeds.pigment) - 0.5) * 12,
+      roughness: hash(stone.id, 3, seeds.structure) * 0.09,
+      weather: hash(stone.id, 4, seeds.weather),
+      structureSeed: seeds.structure ^ Math.imul(stone.id + 1, 0x9e3779b9),
+      pigmentSeed: seeds.pigment ^ Math.imul(stone.id + 1, 0x85ebca6b),
+    };
 
-    return p;
+    profiles.set(stone.id, data);
+    return data;
   }
 
-  return (u, v, shape) => {
-    const { stone, x, y, distance } = shape;
-    const p = identity(stone);
-    const irregularEdge = field(x, y, 8, 9, p.rockSeed ^ 0x16fa937b) * joint * 0.55;
-    const edge = distance + irregularEdge;
-    const inRock = smooth(-joint, joint, edge);
-    const bevelFactor = smooth(-joint, bevel, edge);
-    const voidFactor = 1 - inRock;
-    const coarse = fbm(x, y, 5, 6, p.rockSeed, 4);
-    const mid = fbm(x, y, 16, 18, p.rockSeed ^ 0x16aefd81, 4);
-    const fine = field(x, y, 54, 59, p.rockSeed ^ 0x72931bfa);
-    const erosion = smooth(0.15, 0.6, mid * 0.62 + fine * 0.38) * stone.chip;
-    const plane = stone.tiltX * (x - 0.5) + stone.tiltY * (y - 0.5);
-    const broad = Math.sin((x + stone.tiltX * y) * 6.28318) * stone.facet * 0.014;
-    const relief = (0.63 + stone.lift + plane + broad + coarse * 0.062 + mid * 0.026 + fine * 0.012) * bevelFactor -
-      erosion * 0.028 * inRock;
-    const mortarRough = field(u, v, 43, 43, seeds.structure ^ 0x526411c3);
-    const height = relief * inRock + (0.32 + mortarRough * 0.015) * voidFactor;
+  return (u, v, placement) => {
+    const { stone, x, y, distance } = placement;
+    const identityData = identity(stone);
+    const rawEdge = field(x, y, 8, 8, identityData.structureSeed ^ 0x192bd531) * seam * 0.5;
+    const inset = distance + rawEdge;
+    const inStone = smooth(-seam, seam, inset);
+    const bevel = smooth(-seam, bevelWidth, inset);
+    const stoneCoarse = fbm(x, y, 3, 4, identityData.structureSeed, 4);
+    const stoneMid = fbm(x, y, 13, 16, identityData.structureSeed ^ 0x51612c3d, 3);
+    const stoneFine = field(x, y, 56, 59, identityData.structureSeed ^ 0x5d7c193a);
+    const erosion = Math.max(0, stoneMid * 0.65 + stoneFine * 0.35 - 0.16) * stone.wear;
+    const dx = x - 0.5;
+    const dy = y - 0.5;
+    const facet = dx * identityData.facetX + dy * identityData.facetY + identityData.facetOffset;
+    const facetWarp = stoneCoarse * 0.085;
+    const fracture = smooth(-0.085, 0.085, facet + facetWarp) - 0.5;
+    const crackPosition = dx * identityData.fissureX + dy * identityData.fissureY - 0.11 + stoneMid * 0.045;
+    const crack = identityData.fractured
+      ? (1 - smooth(0.008, 0.024, Math.abs(crackPosition))) *
+        smooth(0.38, 0.2, Math.abs(dy)) : 0;
+    const porous = Math.max(0, stoneMid * 0.5 + stoneFine * 0.5 - 0.09) *
+      Math.max(0, stoneCoarse + 0.28);
+    const plane = stone.slopeX * (x - 0.5) + stone.slopeY * (y - 0.5);
+    const stoneHeight = 0.56 + stone.protrusion + plane +
+      fracture * identityData.facetDepth + stoneCoarse * 0.058 * stone.shape +
+      stoneMid * 0.029 * stone.shape + stoneFine * 0.007 -
+      erosion * 0.042 - porous * 0.075 - crack * 0.055;
+    const mortarTexture = field(u, v, 63, 59, seeds.structure ^ 0x618fac31);
+    const height = mix(0.38 + mortarTexture * 0.014, stoneHeight * (0.65 + 0.35 * bevel), inStone);
 
-    // Surface pigments derive from geological inclusions, not pixelwise RGB randomness.
-    const pigmentBroad = fbm(x, y, 8, 10, p.colorSeed, 3);
-    const grain = field(x, y, 46, 49, p.colorSeed ^ 0x58adb116);
-    const inclusions = Math.max(0, pigmentBroad * 0.65 + grain * 0.35 - 0.18);
-    const vein = p.vein ? Math.max(0, 1 - Math.abs(y - 0.38 - pigmentBroad * 0.12) / 0.026) : 0;
-    const sediment = Math.max(0, fbm(u, v, 6, 11, seeds.weather ^ 0x491617a3, 3));
-    const rain = Math.max(0, field(u, v, 13, 3, seeds.weather ^ 0x392af171) - 0.22);
-    const dirt = (sediment * 0.65 + rain * 0.35) * age * (0.7 + p.weather * 0.6);
-    const cavity = 1 - smooth(joint, bevel * 2, edge);
-    const shade = p.tone + coarse * 10 + grain * 7 * grammar.detail -
-      inclusions * 14 * mineralStrength - vein * 9 - dirt * 36 - cavity * 5;
-    const color = geology.base.map((channel, i) => {
-      const stoneColor = channel + shade + (i === 0 ? p.warmth : i === 2 ? -p.warmth : 0) +
-        (geology.mineral[i] - channel) * inclusions * mineralStrength;
-      const mortarColor = geology.mortar[i] + mortarRough * 9 - dirt * 15;
-      return stoneColor * inRock + mortarColor * voidFactor;
+    // Stone color is tied to a single geological family and local inclusions.
+    const pigmentMacro = fbm(x, y, 4, 5, identityData.pigmentSeed, 4);
+    const mineral = fbm(x, y, 18, 19, identityData.pigmentSeed ^ 0xb372916f, 3);
+    const grain = field(x, y, 75, 72, identityData.pigmentSeed ^ 0x126c95f7);
+    const sediment = Math.max(0, fbm(u, v, 5, 7, seeds.weather ^ 0x34b1d2f5, 3));
+    const rain = Math.max(0, field(u, v, 9, 3, seeds.weather ^ 0xc52b381e));
+    const dirt = age * (sediment * 0.62 + rain * 0.38) *
+      (0.6 + 0.4 * identityData.weather) * (0.75 + y * 0.25);
+    const inclusion = smooth(0.02, 0.32, mineral + pigmentMacro * 0.32);
+    const cavity = 1 - smooth(0, bevelWidth * 2, inset);
+    const color = family.stone.map((channel, i) => {
+      const pigmentVariation = pigmentMacro * 13 + mineral * 11 + grain * 4 * grammar.detail;
+      const rocky = channel + identityData.offset + pigmentVariation +
+        inclusion * (family.inclusion[i] - channel) * 0.7 - dirt * 36 -
+        cavity * 8 + stoneCoarse * 8 + fracture * 12 - crack * 20 - porous * 28 +
+        (i === 0 ? identityData.warmth : -identityData.warmth * 0.3);
+      const mortar = family.mortar[i] + mortarTexture * 6 - dirt * 10;
+      return mix(mortar, rocky, inStone);
     });
 
-    const roughness = clamp((0.78 + p.roughness + Math.abs(fine) * 0.07 + erosion * 0.08 + dirt * 0.12) * inRock +
-      (0.9 + mortarRough * 0.025) * voidFactor - cavity * 0.02);
+    const roughness = clamp(mix(0.9 + mortarTexture * 0.02,
+      0.72 + identityData.roughness + Math.abs(stoneFine) * 0.07 + erosion * 0.14 +
+      porous * 0.14 + crack * 0.05 + dirt * 0.14,
+      inStone));
 
-    return { color, height, roughness, edge: cavity * 0.35, detail: pigmentBroad * 0.1 };
+    return { color, height, roughness, edge: cavity * 0.15, detail: mineral * 0.12 };
   };
 }
