@@ -1,38 +1,38 @@
 import { fbm, field, hash } from '../random.js';
 
 const palettes = [
-  [164, 149, 126],
-  [130, 135, 145],
-  [180, 132, 96],
-  [113, 104, 99],
-  [189, 180, 155],
+  [[164, 148, 121], [119, 119, 111], [181, 162, 131], [99, 100, 99], [146, 113, 85]],
+  [[142, 140, 135], [103, 113, 120], [166, 162, 145], [91, 95, 96], [158, 133, 103]],
+  [[164, 113, 82], [114, 104, 97], [190, 150, 102], [118, 89, 79], [164, 145, 125]],
+  [[177, 169, 148], [130, 133, 124], [201, 187, 150], [151, 143, 129], [111, 119, 119]],
+  [[113, 122, 121], [80, 93, 102], [160, 137, 109], [138, 144, 133], [103, 90, 84]],
 ];
 
 const clamp = (value) => Math.max(0, Math.min(1, value));
 const wrap = (value) => ((value % 1) + 1) % 1;
 
-function smooth(min, max, value) {
-  const t = clamp((value - min) / (max - min));
+function smooth(a, b, value) {
+  const t = clamp((value - a) / (b - a));
 
   return t * t * (3 - 2 * t);
 }
 
 function partitions(count, random) {
-  const widths = Array.from({ length: count }, () => random.range(0.6, 1.65));
-  const total = widths.reduce((sum, width) => sum + width, 0);
+  const weights = Array.from({ length: count }, () => random.range(0.48, 1.9));
+  const total = weights.reduce((sum, value) => sum + value, 0);
   const boundaries = [0];
 
-  for (const width of widths) {
+  for (const width of weights) {
     boundaries.push(boundaries.at(-1) + width / total);
   }
 
   return boundaries;
 }
 
-function partitionAt(value, boundaries) {
+function segmentAt(position, boundaries) {
   let index = 0;
 
-  while (index < boundaries.length - 2 && value >= boundaries[index + 1]) {
+  while (index < boundaries.length - 2 && position >= boundaries[index + 1]) {
     index++;
   }
 
@@ -40,92 +40,87 @@ function partitionAt(value, boundaries) {
 
   return {
     index,
-    distance: Math.min(value - boundaries[index], boundaries[index + 1] - value) / width,
+    edge: Math.min(position - boundaries[index], boundaries[index + 1] - position) / width,
   };
 }
 
-function coursedStones(structure, density) {
-  const rows = Math.max(2, Math.round(structure.int(3, 8) * density));
-  const rowBoundaries = partitions(rows, structure);
-  const courses = Array.from({ length: rows }, () => {
-    const count = Math.max(2, Math.round(structure.int(2, 7) * density));
-
-    return {
-      boundaries: partitions(count, structure),
-      offset: structure.float(),
-    };
-  });
+function coursedLayout(structure, density) {
+  const rows = Math.max(3, Math.round(structure.int(4, 10) * density));
+  const heights = partitions(rows, structure);
+  const courses = Array.from({ length: rows }, () => ({
+    edges: partitions(Math.max(2, Math.round(structure.int(2, 8) * density)), structure),
+    offset: structure.float(),
+  }));
 
   return (u, v) => {
-    const row = partitionAt(wrap(v), rowBoundaries);
+    const row = segmentAt(wrap(v), heights);
     const course = courses[row.index];
-    const stone = partitionAt(wrap(u + course.offset), course.boundaries);
+    const stone = segmentAt(wrap(u + course.offset), course.edges);
 
     return {
-      x: stone.index,
-      y: row.index,
-      boundary: Math.min(stone.distance, row.distance),
-      face: 1,
+      idX: stone.index,
+      idY: row.index,
+      edge: Math.min(stone.edge, row.edge) * 0.9,
+      center: 0.5,
     };
   };
 }
 
-function scatteredStones(structure, density, seed, rounded) {
-  const columns = Math.max(2, Math.round(structure.int(3, rounded ? 9 : 7) * density));
-  const rows = Math.max(2, Math.round(structure.int(3, rounded ? 9 : 7) * density));
-  const jitter = rounded ? 0.33 : structure.range(0.25, 0.48);
-  const aspect = rounded ? structure.range(0.88, 1.12) : structure.range(0.65, 1.75);
-  const centers = [];
+function scatteredLayout(structure, density, seed, fieldstones) {
+  const columns = Math.max(3, Math.round(structure.int(4, fieldstones ? 8 : 13) * density));
+  const rows = Math.max(3, Math.round(structure.int(4, fieldstones ? 8 : 12) * density));
+  const aspect = fieldstones ? structure.range(0.84, 1.18) : structure.range(0.65, 1.55);
+  const jitter = fieldstones ? 0.36 : structure.range(0.28, 0.48);
 
-  for (let y = 0; y < rows; y++) {
-    const row = [];
-
-    for (let x = 0; x < columns; x++) {
-      row.push([
-        x + 0.5 + (hash(x, y, seed ^ 0xa8c519f3) - 0.5) * jitter * 2,
-        y + 0.5 + (hash(x, y, seed ^ 0x41f7c22b) - 0.5) * jitter * 2,
-      ]);
-    }
-
-    centers.push(row);
-  }
+  const centers = Array.from({ length: rows }, (_, y) =>
+    Array.from({ length: columns }, (_, x) => ({
+      x: x + 0.5 + (hash(x, y, seed ^ 0xa8c519f3) - 0.5) * jitter * 2,
+      y: y + 0.5 + (hash(x, y, seed ^ 0x41f7c22b) - 0.5) * jitter * 2,
+      weight: (hash(x, y, seed ^ 0xda3195bd) - 0.5) * (fieldstones ? 0.65 : 0.9),
+    }))
+  );
 
   return (u, v) => {
     const x = wrap(u) * columns;
     const y = wrap(v) * rows;
-    const cx = Math.floor(x);
-    const cy = Math.floor(y);
+    const originX = Math.floor(x);
+    const originY = Math.floor(y);
 
     let first = Infinity;
     let second = Infinity;
-    let stoneX = 0;
-    let stoneY = 0;
+    let winnerX = 0;
+    let winnerY = 0;
+    let closestDistance = 0;
 
-    for (let oy = -1; oy <= 1; oy++) {
-      for (let ox = -1; ox <= 1; ox++) {
-        const ix = ((cx + ox) % columns + columns) % columns;
-        const iy = ((cy + oy) % rows + rows) % rows;
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const gx = originX + dx;
+        const gy = originY + dy;
+        const ix = ((gx % columns) + columns) % columns;
+        const iy = ((gy % rows) + rows) % rows;
         const center = centers[iy][ix];
-        const dx = (x - (center[0] + Math.floor((cx + ox) / columns) * columns)) / aspect;
-        const dy = (y - (center[1] + Math.floor((cy + oy) / rows) * rows)) * aspect;
-        const distance = Math.hypot(dx, dy);
+        const offsetX = (x - (gx - ix + center.x)) / aspect;
+        const offsetY = (y - (gy - iy + center.y)) * aspect;
+        const distance = offsetX * offsetX + offsetY * offsetY;
+        const score = distance - center.weight;
 
-        if (distance < first) {
+        if (score < first) {
           second = first;
-          first = distance;
-          stoneX = ix;
-          stoneY = iy;
-        } else if (distance < second) {
-          second = distance;
+          first = score;
+          winnerX = ix;
+          winnerY = iy;
+          closestDistance = Math.sqrt(distance);
+        } else if (score < second) {
+          second = score;
         }
       }
     }
 
     return {
-      x: stoneX,
-      y: stoneY,
-      boundary: (second - first) * 0.55,
-      face: rounded ? clamp(1 - first * 0.2) : 1,
+      idX: winnerX,
+      idY: winnerY,
+      edge: Math.max(0, (second - first) * (fieldstones ? 0.36 : 0.42)),
+      center: closestDistance,
     };
   };
 }
@@ -136,49 +131,91 @@ export const stone = {
   create({ structure, pigment, weather, style, seeds }) {
     const grammar = style.grammar;
     const layout = structure.int(0, 2);
-
     const findStone = layout === 0
-      ? coursedStones(structure, grammar.density)
-      : scatteredStones(structure, grammar.density, seeds.structure, layout === 2);
+      ? coursedLayout(structure, grammar.density)
+      : scatteredLayout(structure, grammar.density, seeds.structure, layout === 2);
 
-    const jointWidth = structure.range(0.045, 0.125) * grammar.edgeWidth;
-    const relief = structure.range(0.2, 0.48);
-    const deformation = structure.range(0.005, 0.035) * grammar.irregularity;
-    const base = pigment.pick(palettes);
-    const contrast = pigment.range(14, 43);
-    const mortar = base.map((channel) => channel * 0.57);
-    const patina = weather.range(0.05, 0.28);
+    const gap = structure.range(0.023, 0.09) * grammar.edgeWidth;
+    const bevelWidth = structure.range(2.2, 4.6);
+    const warp = structure.range(0.007, 0.035) * grammar.irregularity;
+    const ruggedness = structure.range(0.55, 1.25);
+    const palettesForWall = pigment.pick(palettes);
+    const mortarBase = pigment.range(0.52, 0.78);
+    const colorSpread = pigment.range(0.72, 1.18);
+    const weathering = weather.range(0.1, 0.48);
+    const lichenCoverage = weather.range(0, 0.25);
+
+    const stoneCache = new Map();
+
+    function profile(x, y) {
+      const key = x + ':' + y;
+
+      if (stoneCache.has(key)) return stoneCache.get(key);
+
+      const elevation = hash(x, y, seeds.structure ^ 0x291573af);
+      const tint = hash(x, y, seeds.pigment ^ 0x41629b5d);
+      const colorIndex = Math.floor(hash(x, y, seeds.pigment ^ 0x4bd9036f) * palettesForWall.length);
+      const variation = (hash(x, y, seeds.pigment ^ 0x93b15e26) - 0.5) * 24;
+      const mineral = hash(x, y, seeds.structure ^ 0x853bcaf1);
+      const data = {
+        elevation,
+        color: palettesForWall[colorIndex].map((channel) =>
+          channel * (0.83 + tint * 0.34) + variation * colorSpread
+        ),
+        mineral,
+      };
+
+      stoneCache.set(key, data);
+
+      return data;
+    }
 
     return (u, v) => {
-      const warpX = field(u, v, 6, 7, seeds.structure ^ 0x719e3f41) * deformation;
-      const warpY = field(u, v, 7, 6, seeds.structure ^ 0x4d16ab27) * deformation;
-      const cell = findStone(u + warpX, v + warpY);
+      const distortionX = field(u, v, 19, 17, seeds.structure ^ 0x719e3f41) * warp;
+      const distortionY = field(u, v, 17, 19, seeds.structure ^ 0x4d16ab27) * warp;
+      const stone = findStone(u + distortionX, v + distortionY);
+      const data = profile(stone.idX, stone.idY);
 
-      const joint = 1 - smooth(jointWidth * 0.35, jointWidth, cell.boundary);
-      const bevel = smooth(jointWidth * 0.2, jointWidth * 2.8, cell.boundary);
-      const elevation = hash(cell.x, cell.y, seeds.structure ^ 0x291573af);
-      const fracture = fbm(u, v, 21, 17, seeds.structure ^ 0x6dc8a195, 3);
-      const shape = clamp(0.42 + relief * bevel * cell.face * (0.78 + elevation * 0.22) + fracture * 0.03);
+      const brokenEdge = field(u, v, 39, 37, seeds.structure ^ 0x82511e7b);
+      const boundary = stone.edge + brokenEdge * gap * 0.3;
+      const joint = 1 - smooth(gap * 0.25, gap, boundary);
+      const bevel = smooth(gap * 0.4, gap * bevelWidth, boundary);
+      const chipped = Math.max(0, brokenEdge - 0.2);
+      const coarse = fbm(u, v, 23, 21, seeds.structure ^ 0x6dc8a195, 2);
+      const fine = field(u, v, 101, 99, seeds.structure ^ 0x01c5e2b7);
+      const pits = smooth(0.12, 0.48, fine * 0.7 + coarse * 0.3);
+      const face = (0.62 + data.elevation * 0.21) * bevel -
+        chipped * 0.11 * (1 - bevel) + coarse * 0.07 * ruggedness -
+        pits * 0.075 * ruggedness;
 
-      const stoneTone = (hash(cell.x, cell.y, seeds.pigment ^ 0x41629b5d) - 0.5) * contrast;
-      const mineral = fbm(u, v, 13, 12, seeds.pigment ^ 0x2e81a549, 3);
-      const grain = field(u, v, 49, 47, seeds.pigment ^ 0x7ad61b93) * grammar.detail;
-      const stains = Math.max(0, fbm(u, v, 6, 7, seeds.weather, 3)) * patina * 100;
-      const pitting = Math.max(0, fbm(u, v, 36, 33, seeds.weather ^ 0x9ebd1a34, 3));
+      const mineral = fbm(u, v, 17, 19, seeds.pigment ^ 0x2e81a549, 2);
+      const speckle = field(u, v, 97, 101, seeds.pigment ^ 0x7ad61b93);
+      const mineralVein = smooth(0.42, 0.7, Math.abs(mineral + speckle * 0.25)) *
+        data.mineral;
+      const stain = Math.max(0, field(u, v, 7, 9, seeds.weather)) * weathering;
+      const lichen = smooth(0.14, 0.4, field(u, v, 21, 23, seeds.weather ^ 0xc537e2a1)) *
+        lichenCoverage;
 
-      const color = base.map((channel, index) => {
-        const tone = stoneTone + mineral * 30 + grain * 9;
-        const stoneColor = channel + tone * (index === 2 ? 0.8 : 1) - stains - pitting * 14;
+      const mortar = palettesForWall[0].map((channel) =>
+        channel * mortarBase + fine * 12 + stain * 15
+      );
+
+      const color = data.color.map((channel, index) => {
+        const grain = (mineral * 22 + speckle * 15 * grammar.detail +
+          mineralVein * 18) * (index === 2 ? 0.78 : 1);
+        const stoneColor = channel + grain - stain * 60 -
+          pits * 13 + lichen * (index === 1 ? 24 : -23);
 
         return stoneColor * (1 - joint) + mortar[index] * joint;
       });
 
       return {
         color,
-        height: shape * (1 - joint) + 0.24 * joint,
-        roughness: clamp(0.8 + pitting * 0.22 + patina * 0.12 + joint * 0.12),
+        height: 0.28 * joint + clamp(0.18 + face) * (1 - joint),
+        roughness: clamp(0.77 + pits * 0.13 + stain * 0.15 +
+          lichen * 0.09 + joint * 0.14 + Math.max(0, coarse) * 0.04),
         edge: joint,
-        detail: mineral * 0.4,
+        detail: mineral * 0.33,
       };
     };
   },
