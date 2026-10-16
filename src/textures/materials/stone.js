@@ -1,126 +1,111 @@
-import { fbm, field, hash } from '../random.js';
+import { field, fbm, hash } from '../random.js';
 
-const palettes = [
-  [[164, 148, 121], [119, 119, 111], [181, 162, 131], [99, 100, 99], [146, 113, 85]],
-  [[142, 140, 135], [103, 113, 120], [166, 162, 145], [91, 95, 96], [158, 133, 103]],
-  [[164, 113, 82], [114, 104, 97], [190, 150, 102], [118, 89, 79], [164, 145, 125]],
-  [[177, 169, 148], [130, 133, 124], [201, 187, 150], [151, 143, 129], [111, 119, 119]],
-  [[113, 122, 121], [80, 93, 102], [160, 137, 109], [138, 144, 133], [103, 90, 84]],
+const families = [
+  [[148, 137, 119], [126, 126, 120], [166, 150, 129], [118, 115, 107], [149, 140, 127]],
+  [[141, 146, 145], [116, 126, 130], [160, 153, 139], [104, 112, 116], [145, 139, 130]],
+  [[162, 143, 120], [124, 113, 98], [156, 137, 112], [126, 122, 115], [174, 155, 131]],
+  [[135, 127, 116], [114, 116, 111], [157, 153, 141], [130, 124, 109], [102, 106, 107]],
 ];
 
-const clamp = (value) => Math.max(0, Math.min(1, value));
-const wrap = (value) => ((value % 1) + 1) % 1;
+const clamp = (v) => Math.max(0, Math.min(1, v));
+const wrap = (v) => ((v % 1) + 1) % 1;
+const mix = (a, b, t) => a + (b - a) * t;
 
-function smooth(a, b, value) {
-  const t = clamp((value - a) / (b - a));
-
+function smooth(a, b, v) {
+  const t = clamp((v - a) / (b - a));
   return t * t * (3 - 2 * t);
 }
 
-function partitions(count, random) {
-  const weights = Array.from({ length: count }, () => random.range(0.48, 1.9));
-  const total = weights.reduce((sum, value) => sum + value, 0);
-  const boundaries = [0];
+function courses(structure, density, seed) {
+  const rows = Math.max(3, Math.round(structure.int(4, 9) * density));
+  const rowWeights = Array.from({ length: rows }, () => structure.range(0.6, 1.45));
+  const totalHeight = rowWeights.reduce((a, b) => a + b);
+  const rowsData = [];
+  let top = 0;
 
-  for (const width of weights) {
-    boundaries.push(boundaries.at(-1) + width / total);
+  for (let y = 0; y < rows; y++) {
+    const bottom = y === rows - 1 ? 1 : top + rowWeights[y] / totalHeight;
+    const count = Math.max(2, Math.round(structure.int(3, 9) * density));
+    const widths = Array.from({ length: count }, () => structure.range(0.45, 1.8));
+    const totalWidth = widths.reduce((a, b) => a + b);
+    const stones = [];
+    let left = 0;
+
+    for (let x = 0; x < count; x++) {
+      const right = left + widths[x] / totalWidth;
+      stones.push({ left, right, id: y * 100 + x });
+      left = right;
+    }
+
+    rowsData.push({ top, bottom, stones, shift: structure.float() });
+    top = bottom;
   }
 
-  return boundaries;
-}
+  return (u, v) => {
+    const yy = wrap(v);
+    const rowIndex = rowsData.findIndex((r) => yy < r.bottom);
+    const row = rowsData[rowIndex];
+    const xx = wrap(u + row.shift);
+    const stone = row.stones.find((s) => xx < s.right) || row.stones.at(-1);
+    const left = (xx - stone.left) / (stone.right - stone.left);
+    const across = (yy - row.top) / (row.bottom - row.top);
+    const edge = Math.min(left, 1 - left, across, 1 - across);
+    const corner = Math.min(left, 1 - left) + Math.min(across, 1 - across);
 
-function segmentAt(position, boundaries) {
-  let index = 0;
-
-  while (index < boundaries.length - 2 && position >= boundaries[index + 1]) {
-    index++;
-  }
-
-  const width = boundaries[index + 1] - boundaries[index];
-
-  return {
-    index,
-    edge: Math.min(position - boundaries[index], boundaries[index + 1] - position) / width,
+    return { id: stone.id, edge: Math.min(edge, corner * 0.64), positionX: left, positionY: across };
   };
 }
 
-function coursedLayout(structure, density) {
-  const rows = Math.max(3, Math.round(structure.int(4, 10) * density));
-  const heights = partitions(rows, structure);
-  const courses = Array.from({ length: rows }, () => ({
-    edges: partitions(Math.max(2, Math.round(structure.int(2, 8) * density)), structure),
-    offset: structure.float(),
-  }));
+function irregularStones(structure, density, seed, rounded) {
+  const cols = Math.max(3, Math.round(structure.int(4, rounded ? 7 : 10) * density));
+  const rows = Math.max(3, Math.round(structure.int(4, rounded ? 7 : 9) * density));
+  const aspect = structure.range(0.85, rounded ? 1.14 : 1.48);
+  const centers = [];
+  let id = 0;
+
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      if (structure.float() < 0.2) continue;
+
+      centers.push({
+        x: (x + 0.5 + structure.range(-0.43, 0.43)) / cols,
+        y: (y + 0.5 + structure.range(-0.43, 0.43)) / rows,
+        radius: structure.range(0.55, 1.7),
+        id: id++,
+      });
+    }
+  }
 
   return (u, v) => {
-    const row = segmentAt(wrap(v), heights);
-    const course = courses[row.index];
-    const stone = segmentAt(wrap(u + course.offset), course.edges);
-
-    return {
-      idX: stone.index,
-      idY: row.index,
-      edge: Math.min(stone.edge, row.edge) * 0.9,
-      center: 0.5,
-    };
-  };
-}
-
-function scatteredLayout(structure, density, seed, fieldstones) {
-  const columns = Math.max(3, Math.round(structure.int(4, fieldstones ? 8 : 13) * density));
-  const rows = Math.max(3, Math.round(structure.int(4, fieldstones ? 8 : 12) * density));
-  const aspect = fieldstones ? structure.range(0.84, 1.18) : structure.range(0.65, 1.55);
-  const jitter = fieldstones ? 0.36 : structure.range(0.28, 0.48);
-
-  const centers = Array.from({ length: rows }, (_, y) =>
-    Array.from({ length: columns }, (_, x) => ({
-      x: x + 0.5 + (hash(x, y, seed ^ 0xa8c519f3) - 0.5) * jitter * 2,
-      y: y + 0.5 + (hash(x, y, seed ^ 0x41f7c22b) - 0.5) * jitter * 2,
-      weight: (hash(x, y, seed ^ 0xda3195bd) - 0.5) * (fieldstones ? 0.65 : 0.9),
-    }))
-  );
-
-  return (u, v) => {
-    const x = wrap(u) * columns;
-    const y = wrap(v) * rows;
-    const originX = Math.floor(x);
-    const originY = Math.floor(y);
-
     let first = Infinity;
     let second = Infinity;
-    let winnerX = 0;
-    let winnerY = 0;
-    let closestDistance = 0;
+    let chosen = centers[0];
+    let nearestDx = 0;
+    let nearestDy = 0;
 
-    for (let dy = -1; dy <= 1; dy++) {
-      for (let dx = -1; dx <= 1; dx++) {
-        const gx = originX + dx;
-        const gy = originY + dy;
-        const ix = ((gx % columns) + columns) % columns;
-        const iy = ((gy % rows) + rows) % rows;
-        const center = centers[iy][ix];
-        const offsetX = (x - (gx - ix + center.x)) / aspect;
-        const offsetY = (y - (gy - iy + center.y)) * aspect;
-        const distance = offsetX * offsetX + offsetY * offsetY;
-        const score = distance - center.weight;
+    for (const center of centers) {
+      const dx = wrap(u - center.x + 0.5) - 0.5;
+      const dy = wrap(v - center.y + 0.5) - 0.5;
+      const scaledX = dx * cols / aspect;
+      const scaledY = dy * rows * aspect;
+      const distance = Math.hypot(scaledX, scaledY) / center.radius;
 
-        if (score < first) {
-          second = first;
-          first = score;
-          winnerX = ix;
-          winnerY = iy;
-          closestDistance = Math.sqrt(distance);
-        } else if (score < second) {
-          second = score;
-        }
+      if (distance < first) {
+        second = first;
+        first = distance;
+        chosen = center;
+        nearestDx = scaledX;
+        nearestDy = scaledY;
+      } else if (distance < second) {
+        second = distance;
       }
     }
 
     return {
-      idX: winnerX,
-      idY: winnerY,
-      edge: Math.max(0, (second - first) * (fieldstones ? 0.36 : 0.42)),
-      center: closestDistance,
+      id: chosen.id,
+      edge: (second - first) * 0.58,
+      positionX: nearestDx,
+      positionY: nearestDy,
     };
   };
 }
@@ -132,90 +117,99 @@ export const stone = {
     const grammar = style.grammar;
     const layout = structure.int(0, 2);
     const findStone = layout === 0
-      ? coursedLayout(structure, grammar.density)
-      : scatteredLayout(structure, grammar.density, seeds.structure, layout === 2);
+      ? courses(structure, grammar.density, seeds.structure)
+      : irregularStones(structure, grammar.density, seeds.structure, layout === 2);
 
-    const gap = structure.range(0.023, 0.09) * grammar.edgeWidth;
-    const bevelWidth = structure.range(2.2, 4.6);
-    const warp = structure.range(0.007, 0.035) * grammar.irregularity;
-    const ruggedness = structure.range(0.55, 1.25);
-    const palettesForWall = pigment.pick(palettes);
-    const mortarBase = pigment.range(0.52, 0.78);
-    const colorSpread = pigment.range(0.72, 1.18);
-    const weathering = weather.range(0.1, 0.48);
-    const lichenCoverage = weather.range(0, 0.25);
+    const width = structure.range(0.008, 0.017) * grammar.edgeWidth;
+    const bevelSize = structure.range(0.055, 0.095);
+    const warpStrength = structure.range(0.022, 0.058) * grammar.irregularity;
+    const colors = pigment.pick(families);
+    const mortarTone = pigment.range(0.66, 0.74);
+    const mortar = colors[0].map((c) => c * mortarTone);
+    const aging = weather.range(0.07, 0.26);
 
-    const stoneCache = new Map();
+    const profiles = new Map();
 
-    function profile(x, y) {
-      const key = x + ':' + y;
+    function profile(id) {
+      if (profiles.has(id)) return profiles.get(id);
 
-      if (stoneCache.has(key)) return stoneCache.get(key);
-
-      const elevation = hash(x, y, seeds.structure ^ 0x291573af);
-      const tint = hash(x, y, seeds.pigment ^ 0x41629b5d);
-      const colorIndex = Math.floor(hash(x, y, seeds.pigment ^ 0x4bd9036f) * palettesForWall.length);
-      const variation = (hash(x, y, seeds.pigment ^ 0x93b15e26) - 0.5) * 24;
-      const mineral = hash(x, y, seeds.structure ^ 0x853bcaf1);
+      const color = colors[Math.floor(hash(id, 0, seeds.pigment ^ 0x852dad2b) * colors.length)];
+      const lightness = mix(0.86, 1.12, hash(id, 1, seeds.pigment));
+      const rocky = hash(id, 0, seeds.structure ^ 0x135127ab);
+      const angle = hash(id, 1, seeds.structure ^ 0x3ad9f276) * Math.PI * 2;
       const data = {
-        elevation,
-        color: palettesForWall[colorIndex].map((channel) =>
-          channel * (0.83 + tint * 0.34) + variation * colorSpread
-        ),
-        mineral,
+        color: color.map((c) => c * lightness),
+        rockiness: rocky,
+        cos: Math.cos(angle),
+        sin: Math.sin(angle),
+        pitting: hash(id, 3, seeds.structure ^ 0xf27a5109),
+        cracked: hash(id, 4, seeds.structure ^ 0x61f927ad) > 0.7 ? 1 : 0,
+        striation: hash(id, 5, seeds.structure ^ 0x27b167da),
       };
 
-      stoneCache.set(key, data);
-
+      profiles.set(id, data);
       return data;
     }
 
     return (u, v) => {
-      const distortionX = field(u, v, 19, 17, seeds.structure ^ 0x719e3f41) * warp;
-      const distortionY = field(u, v, 17, 19, seeds.structure ^ 0x4d16ab27) * warp;
-      const stone = findStone(u + distortionX, v + distortionY);
-      const data = profile(stone.idX, stone.idY);
+      const macroX = fbm(u, v, 7, 8, seeds.structure ^ 0x7151e6b2, 3);
+      const macroY = fbm(u, v, 8, 7, seeds.structure ^ 0x59375db9, 3);
+      const micro = field(u, v, 45, 43, seeds.structure ^ 0x863b7f14);
+      const warpedU = u + macroX * warpStrength + micro * 0.004;
+      const warpedV = v + macroY * warpStrength + micro * 0.004;
+      const shape = findStone(warpedU, warpedV);
+      const p = profile(shape.id);
 
-      const brokenEdge = field(u, v, 39, 37, seeds.structure ^ 0x82511e7b);
-      const boundary = stone.edge + brokenEdge * gap * 0.3;
-      const joint = 1 - smooth(gap * 0.25, gap, boundary);
-      const bevel = smooth(gap * 0.4, gap * bevelWidth, boundary);
-      const chipped = Math.max(0, brokenEdge - 0.2);
-      const coarse = fbm(u, v, 23, 21, seeds.structure ^ 0x6dc8a195, 2);
-      const fine = field(u, v, 101, 99, seeds.structure ^ 0x01c5e2b7);
-      const pits = smooth(0.12, 0.48, fine * 0.7 + coarse * 0.3);
-      const face = (0.62 + data.elevation * 0.21) * bevel -
-        chipped * 0.11 * (1 - bevel) + coarse * 0.07 * ruggedness -
-        pits * 0.075 * ruggedness;
+      const broken = field(u, v, 63, 65, seeds.structure ^ 0x64f782b1);
+      const gap = Math.max(0, shape.edge + broken * width * 0.45);
+      const joint = 1 - smooth(width * 0.38, width, gap);
+      const bevel = smooth(width * 0.75, width + bevelSize, gap);
 
-      const mineral = fbm(u, v, 17, 19, seeds.pigment ^ 0x2e81a549, 2);
-      const speckle = field(u, v, 97, 101, seeds.pigment ^ 0x7ad61b93);
-      const mineralVein = smooth(0.42, 0.7, Math.abs(mineral + speckle * 0.25)) *
-        data.mineral;
-      const stain = Math.max(0, field(u, v, 7, 9, seeds.weather)) * weathering;
-      const lichen = smooth(0.14, 0.4, field(u, v, 21, 23, seeds.weather ^ 0xc537e2a1)) *
-        lichenCoverage;
+      const roughMacro = fbm(u, v, 23, 26, seeds.structure ^ 0x1487b2a9, 5);
+      const roughMid = fbm(u, v, 77, 71, seeds.structure ^ 0x57f2179a, 3);
+      const roughFine = field(u, v, 189, 173, seeds.structure ^ 0xb6520a39);
+      const lineX = shape.positionX - (layout === 0 ? 0.5 : 0);
+      const lineY = shape.positionY - (layout === 0 ? 0.5 : 0);
+      const along = lineX * p.cos + lineY * p.sin;
+      const across = -lineX * p.sin + lineY * p.cos;
+      const lineWarp = field(lineX, lineY, 13, 14, seeds.structure ^ Math.imul(shape.id, 0x41fba269));
+      const crackLine = Math.abs(across + lineWarp * 0.065);
+      const crack = (1 - smooth(0.009, 0.024, crackLine)) *
+        (1 - smooth(0.15, 0.53, Math.abs(along))) * p.cracked;
+      const pits = Math.max(0, roughMid - 0.26) * p.pitting;
+      const localRelief = fbm(shape.positionX, shape.positionY, 17, 18, seeds.structure ^ Math.imul(shape.id, 0x31e45a77), 4);
+      const stoneHeight = 0.51 + bevel * (0.23 + p.rockiness * 0.1) +
+        roughMacro * 0.095 + roughMid * 0.06 + roughFine * 0.033 +
+        localRelief * 0.1 - pits * 0.065 - crack * 0.13;
 
-      const mortar = palettesForWall[0].map((channel) =>
-        channel * mortarBase + fine * 12 + stain * 15
-      );
+      const pigmentMacro = fbm(u, v, 16, 19, seeds.pigment ^ 0x2e81a549, 4);
+      const grain = fbm(u, v, 105, 97, seeds.pigment ^ 0x7ad61b93, 3);
+      const vein = Math.max(0, Math.abs(grain * 0.55 + pigmentMacro * 0.4) - 0.31);
+      const stains = Math.max(0, fbm(u, v, 9, 8, seeds.weather ^ 0xe728691c, 3)) * aging;
+      const localBands = fbm(shape.positionX, shape.positionY, 4, 6, seeds.pigment ^ Math.imul(shape.id, 0x623a09e7), 4);
+      const localDetails = fbm(shape.positionX, shape.positionY, 21, 24, seeds.pigment ^ Math.imul(shape.id, 0x3ae28179), 4);
+      const layers = Math.sin((along * 15 + localBands * 0.6) * Math.PI);
+      const strata = layers * Math.max(0, p.striation - 0.77) * 30;
+      const mineral = (pigmentMacro * 15 + grain * 26 * grammar.detail - vein * 20 +
+        localBands * 23 + localDetails * 20 + strata) *
+        (0.8 + p.rockiness * 0.4);
 
-      const color = data.color.map((channel, index) => {
-        const grain = (mineral * 22 + speckle * 15 * grammar.detail +
-          mineralVein * 18) * (index === 2 ? 0.78 : 1);
-        const stoneColor = channel + grain - stain * 60 -
-          pits * 13 + lichen * (index === 1 ? 24 : -23);
-
-        return stoneColor * (1 - joint) + mortar[index] * joint;
+      const stoneColor = p.color.map((channel, index) => {
+        const shade = (mineral - stains * 56 + roughMacro * 14) * (index === 2 ? 0.82 : 1);
+        return channel + shade - (1 - bevel) * 10 - crack * 32;
       });
+      const mortarNoise = field(u, v, 83, 87, seeds.weather ^ 0x128fa76b) * 12;
+      const color = stoneColor.map((channel, index) =>
+        mix(channel, mortar[index] + mortarNoise - stains * 14, joint)
+      );
 
       return {
         color,
-        height: 0.28 * joint + clamp(0.18 + face) * (1 - joint),
-        roughness: clamp(0.77 + pits * 0.13 + stain * 0.15 +
-          lichen * 0.09 + joint * 0.14 + Math.max(0, coarse) * 0.04),
+        height: mix(stoneHeight, 0.27 + roughFine * 0.025, joint),
+        roughness: clamp(0.79 + Math.abs(roughMid) * 0.12 +
+          Math.max(0, roughFine) * 0.14 + stains * 0.2 + joint * 0.08),
         edge: joint,
-        detail: mineral * 0.33,
+        detail: grain * 0.2,
       };
     };
   },
