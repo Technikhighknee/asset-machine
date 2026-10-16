@@ -42,7 +42,7 @@ export function textureCatalog() {
       id,
       label: style.label,
     })),
-    maps: ['albedo', 'normal', 'roughness'],
+    maps: ['albedo', 'normal', 'roughness', 'height'],
   };
 }
 
@@ -105,6 +105,7 @@ export function generateTexture({
   const albedo = new Uint8Array(pixels * 4);
   const roughness = new Uint8Array(pixels * 4);
   const normals = new Uint8Array(pixels * 4);
+  const heightMap = new Uint8Array(pixels * 4);
   const heights = new Float32Array(pixels);
 
   for (let y = 0; y < period; y++) {
@@ -128,6 +129,8 @@ export function generateTexture({
       setPixel(roughness, index, [rough, rough, rough]);
 
       heights[index] = surface.height;
+      const height = clamp(surface.height * 255);
+      setPixel(heightMap, index, [height, height, height]);
     }
   }
 
@@ -151,7 +154,7 @@ export function generateTexture({
     }
   }
 
-  const maps = { albedo, normal: normals, roughness };
+  const maps = { albedo, normal: normals, roughness, height: heightMap };
 
   for (const image of Object.values(maps)) {
     closeEdges(image, resolution);

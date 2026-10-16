@@ -13,7 +13,7 @@ router.post('/', (req, res, next) => {
   try {
     const { map = 'albedo', ...options } = req.body ?? {};
 
-    if (!['albedo', 'normal', 'roughness'].includes(map)) {
+    if (!['albedo', 'normal', 'roughness', 'height'].includes(map)) {
       throw new RangeError('Unknown texture map');
     }
 

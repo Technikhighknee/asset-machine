@@ -47,9 +47,11 @@ const material = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   roughness: 1,
   metalness: 0,
+  displacementScale: 0.26,
+  displacementBias: -0.13,
 });
 
-const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 128, 96), material);
+const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 512, 384), material);
 scene.add(sphere);
 
 const textureLoader = new THREE.TextureLoader();
@@ -174,6 +176,7 @@ async function generate(requestId) {
       loadMap(maps.albedo, true, pixelated),
       loadMap(maps.normal, false, pixelated),
       loadMap(maps.roughness, false, pixelated),
+      loadMap(maps.height, false, pixelated),
     ]);
 
     const loaded = results
@@ -190,12 +193,13 @@ async function generate(requestId) {
       return;
     }
 
-    const [albedo, normal, roughness] = loaded;
-    const previous = [material.map, material.normalMap, material.roughnessMap];
+    const [albedo, normal, roughness, height] = loaded;
+    const previous = [material.map, material.normalMap, material.roughnessMap, material.displacementMap];
 
     material.map = albedo;
     material.normalMap = normal;
     material.roughnessMap = roughness;
+    material.displacementMap = height;
     material.needsUpdate = true;
 
     const image = 'data:image/png;base64,' + maps.albedo;
