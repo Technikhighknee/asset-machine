@@ -117,6 +117,7 @@ async function loadMap(base64, isColor, pixelated) {
   texture.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(4, 4);
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
   if (pixelated) {
