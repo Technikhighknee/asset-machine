@@ -1,200 +1,179 @@
-import { fbm } from '../../random.js';
+import { field } from '../../random.js';
 
 const wrap = (value) => ((value % 1) + 1) % 1;
-const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const clamp = (value, low, high) => Math.max(low, Math.min(high, value));
 
-const masonry = [
-  // Different building traditions, not different color palettes for the same pattern.
-  { name: 'coarse-rubble', area: [0.07, 0.13], inset: [0.055, 0.11], corners: [0.07, 0.19], horizontal: 0.43, pinnings: 0.04 },
-  { name: 'fieldstone', area: [0.035, 0.075], inset: [0.06, 0.12], corners: [0.16, 0.28], horizontal: 0.49, pinnings: 0.035 },
-  { name: 'rough-bedded', area: [0.045, 0.085], inset: [0.035, 0.085], corners: [0.055, 0.17], horizontal: 0.77, pinnings: 0.075 },
-  { name: 'mortar-rich', area: [0.075, 0.14], inset: [0.095, 0.165], corners: [0.12, 0.24], horizontal: 0.55, pinnings: 0.015 },
+// Stone dimensions, mortar thickness and laying method all belong to the
+// building tradition. The seed chooses a tradition before choosing any stones.
+const traditions = [
+  { name: 'bedded-limestone', rows: [11, 15], cols: [7, 12], widthSpread: 0.8, heightSpread: 0.24, mortar: [0.003, 0.006], split: 0.16, chamfer: [0.035, 0.13], slope: 0.25 },
+  { name: 'rough-rubble', rows: [8, 12], cols: [5, 10], widthSpread: 1.05, heightSpread: 0.37, mortar: [0.005, 0.009], split: 0.09, chamfer: [0.07, 0.22], slope: 0.45 },
+  { name: 'stacked-slate', rows: [13, 19], cols: [5, 11], widthSpread: 1, heightSpread: 0.39, mortar: [0.002, 0.005], split: 0.22, chamfer: [0.015, 0.07], slope: 0.18 },
+  { name: 'weathered-rubble', rows: [8, 12], cols: [5, 9], widthSpread: 0.88, heightSpread: 0.37, mortar: [0.0055, 0.009], split: 0.09, chamfer: [0.085, 0.25], slope: 0.62 },
 ];
 
-function outline(random, inset, corners, irregularity, character) {
-  if (character.name === 'fieldstone') {
-    const vertices = random.int(10, 14);
-    const phase = random.range(0, Math.PI * 2);
+function randomBoundaries(random, count, spread) {
+  const weights = Array.from({ length: count }, () => {
+    const w = random.range(1 - spread * 0.73, 1 + spread);
+    const choice = random.float();
 
-    return Array.from({ length: vertices }, (_, i) => {
-      const angle = phase + (i / vertices) * Math.PI * 2;
-      const radial = random.range(0.77, 1.04);
-      return [
-        clamp(0.5 + Math.cos(angle) * (0.5 - inset) * radial, 0.025, 0.975),
-        clamp(0.5 + Math.sin(angle) * (0.5 - inset) * radial, 0.025, 0.975),
-      ];
-    });
-  }
+    return choice < 0.13 ? w * random.range(1.7, 2.5)
+      : choice < 0.30 ? w * random.range(0.4, 0.7) : w;
+  });
+  const total = weights.reduce((a, b) => a + b);
+  const result = [0];
 
-  const margin = () => clamp(inset * random.range(0.7, 1.4), 0.012, 0.25);
-  const top = margin();
-  const bottom = margin();
-  const left = margin();
-  const right = margin();
-  const notch = () => random.range(...corners);
-  const [tl, tr, br, bl] = [notch(), notch(), notch(), notch()];
-  const jiggle = () => random.range(-0.045, 0.045) * irregularity;
-  const coord = (value) => clamp(value, 0.005, 0.995);
+  for (const weight of weights) result.push(result.at(-1) + weight / total);
+
+  result[result.length - 1] = 1;
+  return result;
+}
+
+function polygon(random, width, height, gap, tradition) {
+  // Fractured edges and chipped corners; the broad resting surfaces stay level.
+  const pad = () => gap * random.range(0.72, 1.65);
+  const left = pad();
+  const right = pad();
+  const top = pad();
+  const bottom = pad();
+  const chamfer = random.range(...tradition.chamfer);
+  const stoneWidth = Math.max(0.004, width - left - right);
+  const stoneHeight = Math.max(0.004, height - top - bottom);
+  const cornerX = Math.min(stoneWidth * chamfer, stoneHeight * 0.33);
+  const cornerY = Math.min(stoneHeight * chamfer, stoneWidth * 0.28);
+  const jag = Math.min(gap * (2.2 + tradition.slope * 2.8), stoneHeight * 0.19);
+  const kink = () => random.range(-jag, jag);
+  const ix = (v) => clamp(v / width, 0.006, 0.994);
+  const iy = (v) => clamp(v / height, 0.006, 0.994);
+  const edgeX = (a, b, t) => a + (b - a) * t;
 
   return [
-    [coord(left + tl), coord(top + jiggle())],
-    [coord(0.38 + jiggle()), coord(top + jiggle())],
-    [coord(0.68 + jiggle()), coord(top + jiggle())],
-    [coord(1 - right - tr), coord(top + jiggle())],
-    [coord(1 - right + jiggle()), coord(top + tr)],
-    [coord(1 - right + jiggle()), coord(0.44 + jiggle())],
-    [coord(1 - right + jiggle()), coord(0.69 + jiggle())],
-    [coord(1 - right - br), coord(1 - bottom + jiggle())],
-    [coord(0.66 + jiggle()), coord(1 - bottom + jiggle())],
-    [coord(0.31 + jiggle()), coord(1 - bottom + jiggle())],
-    [coord(left + bl), coord(1 - bottom + jiggle())],
-    [coord(left + jiggle()), coord(1 - bottom - bl)],
-    [coord(left + jiggle()), coord(0.66 + jiggle())],
-    [coord(left + jiggle()), coord(0.34 + jiggle())],
-    [coord(left + jiggle()), coord(top + tl)],
+    [ix(left + cornerX), iy(top + kink())],
+    [ix(edgeX(left, width - right, 0.31)), iy(top + kink())],
+    [ix(edgeX(left, width - right, 0.66)), iy(top + kink())],
+    [ix(width - right - cornerX), iy(top + kink())],
+    [ix(width - right + kink()), iy(top + cornerY)],
+    [ix(width - right + kink()), iy(edgeX(top, height - bottom, 0.47))],
+    [ix(width - right + kink()), iy(height - bottom - cornerY)],
+    [ix(width - right - cornerX), iy(height - bottom + kink())],
+    [ix(edgeX(left, width - right, 0.65)), iy(height - bottom + kink())],
+    [ix(edgeX(left, width - right, 0.33)), iy(height - bottom + kink())],
+    [ix(left + cornerX), iy(height - bottom + kink())],
+    [ix(left + kink()), iy(height - bottom - cornerY)],
+    [ix(left + kink()), iy(edgeX(top, height - bottom, 0.54))],
+    [ix(left + kink()), iy(top + cornerY)],
   ];
 }
 
-function makeStone(random, id, character, irregularity) {
-  const inset = random.range(...character.inset);
-
-  return {
-    id,
-    polygon: outline(random, inset, character.corners, irregularity, character),
-    protrusion: random.range(-0.035, 0.055),
-    slopeX: random.range(-0.055, 0.055),
-    slopeY: random.range(-0.04, 0.04),
-    shape: random.range(0.55, 1.35),
-    // The stone finish follows the masonry tradition, not a universal noise preset.
-    facetStrength: character.name === 'coarse-rubble' ? random.range(1.0, 1.55)
-      : character.name === 'rough-bedded' ? random.range(0.7, 1.1)
-        : character.name === 'fieldstone' ? random.range(0.3, 0.7)
-          : random.range(0.65, 1.15),
-    faceProfile: character.name === 'rough-bedded' ? 'stratified'
-      : character.name === 'fieldstone' ? 'rounded' : 'fractured',
-    wear: random.range(0.25, 1),
-  };
-}
-
-function polygonDistance(vertices, x, y, width, height) {
+function signedPolygonDistance(stone, u, v) {
+  const px = u * stone.width;
+  const py = v * stone.height;
+  const points = stone.polygon;
+  let distanceSq = Infinity;
   let inside = false;
-  let squared = Infinity;
-  const px = x * width;
-  const py = y * height;
 
-  for (let i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
-    const ax = vertices[j][0] * width;
-    const ay = vertices[j][1] * height;
-    const bx = vertices[i][0] * width;
-    const by = vertices[i][1] * height;
-    const vx = bx - ax;
-    const vy = by - ay;
-    const t = clamp(((px - ax) * vx + (py - ay) * vy) / (vx * vx + vy * vy), 0, 1);
-    const dx = px - ax - t * vx;
-    const dy = py - ay - t * vy;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const ax = points[j][0] * stone.width;
+    const ay = points[j][1] * stone.height;
+    const bx = points[i][0] * stone.width;
+    const by = points[i][1] * stone.height;
+    const dx = bx - ax;
+    const dy = by - ay;
+    const t = clamp(((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy), 0, 1);
+    const ex = px - ax - t * dx;
+    const ey = py - ay - t * dy;
 
-    squared = Math.min(squared, dx * dx + dy * dy);
+    distanceSq = Math.min(distanceSq, ex * ex + ey * ey);
 
-    if ((ay > py) !== (by > py) && px < ax + vx * (py - ay) / vy) {
+    if ((ay > py) !== (by > py) && px < ax + dx * (py - ay) / dy) {
       inside = !inside;
     }
   }
 
-  return Math.sqrt(squared) * (inside ? 1 : -1);
+  return Math.sqrt(distanceSq) * (inside ? 1 : -1);
 }
 
 export function buildWall(random, grammar, seed) {
-  const character = random.pick(masonry);
-  const target = random.range(...character.area) / grammar.density;
-  const stones = [];
-  const offsetX = random.float();
-  const offsetY = random.float();
-  const irregularity = Math.min(1.5, grammar.irregularity);
+  const tradition = random.pick(traditions);
+  const rows = Math.max(4, Math.round(random.int(...tradition.rows) * (0.75 + 0.25 * grammar.density)));
+  const yBounds = randomBoundaries(random, rows, tradition.heightSpread);
+  const courses = [];
   let nextId = 0;
+  const mortarScale = random.range(...tradition.mortar) * grammar.edgeWidth;
+  const warpOffset = random.float();
 
-  // The mortar is allowed to occupy space. Stone regions are only guides for
-  // laying differently sized blocks; their outlines need not fill the guides.
-  function lay(region, depth = 0) {
-    const width = region.x1 - region.x0;
-    const height = region.y1 - region.y0;
-    const aspect = width / height;
-    const finished = depth >= 2 && aspect > 0.5 && aspect < 2.9 &&
-      width * height < target * random.range(0.74, 1.8);
+  for (let row = 0; row < rows; row++) {
+    const count = Math.max(3, Math.round(random.int(...tradition.cols) * Math.sqrt(grammar.density)));
+    const xBounds = randomBoundaries(random, count, tradition.widthSpread);
+    const offset = random.float();
+    const stones = [];
 
-    if (finished || depth >= 9 || (width < 0.085 && height < 0.095)) {
-      stones.push({ ...makeStone(random, nextId++, character, irregularity), ...region });
-      return;
+    for (let col = 0; col < count; col++) {
+      const x0 = xBounds[col];
+      const x1 = xBounds[col + 1];
+      const height = yBounds[row + 1] - yBounds[row];
+      const width = x1 - x0;
+      const split = random.float() < tradition.split && width > 0.055;
+      const divide = split ? random.range(0.32, 0.62) : 1;
+      const pieces = split ? [[0, divide], [divide, 1]] : [[0, 1]];
+
+      for (const [startY, endY] of pieces) {
+        const stoneHeight = height * (endY - startY);
+
+        stones.push({
+          id: nextId++,
+          x0,
+          x1,
+          y0: startY,
+          y1: endY,
+          width,
+          height: stoneHeight,
+          polygon: polygon(random, width, stoneHeight, mortarScale, tradition),
+          face: tradition.name,
+          orientation: random.range(-0.14, 0.14),
+          proud: random.range(-0.027, 0.043),
+          slab: random.range(0.65, 1.3),
+          wear: random.range(0.2, 1),
+        });
+      }
     }
 
-    const horizontal = height > width * 1.4 ||
-      (height >= width * 0.56 && random.float() < character.horizontal);
-    const fraction = random.range(0.29, 0.71);
-
-    if (horizontal) {
-      const split = region.y0 + height * fraction;
-      lay({ ...region, y1: split }, depth + 1);
-      lay({ ...region, y0: split }, depth + 1);
-    } else {
-      const split = region.x0 + width * fraction;
-      lay({ ...region, x1: split }, depth + 1);
-      lay({ ...region, x0: split }, depth + 1);
-    }
+    courses.push({ offset, y0: yBounds[row], y1: yBounds[row + 1], xBounds, stones });
   }
 
-  lay({ x0: 0, x1: 1, y0: 0, y1: 1 });
-
-  // Only rare pinnings: mortar intentionally fills the other irregular voids.
-  const corners = new Set();
-  const pinnings = [];
-
-  for (const large of stones) {
-    for (const [x, y] of [[large.x0, large.y0], [large.x1, large.y0],
-      [large.x0, large.y1], [large.x1, large.y1]]) {
-      const key = Math.round(x * 100000) + ':' + Math.round(y * 100000);
-      if (corners.has(key)) continue;
-      corners.add(key);
-      if (random.float() >= character.pinnings) continue;
-
-      pinnings.push({
-        x: wrap(x),
-        y: wrap(y),
-        radius: random.range(0.012, 0.023),
-        stone: makeStone(random, nextId++, masonry[1], irregularity),
-      });
-    }
-  }
-
+  // Independent row offsets and gentle periodic course deformation keep the
+  // wall laid and horizontally supported without repeating one rigid grid.
   return {
-    type: character.name,
+    type: tradition.name,
     count: nextId,
     sample(u, v) {
-      // One periodic warp applies to both stones and mortar boundaries.
-      const x = wrap(u + offsetX + fbm(u, v, 8, 7, seed ^ 0x5171aef2, 3) * 0.012);
-      const y = wrap(v + offsetY + fbm(u, v, 7, 9, seed ^ 0x5a2f3197, 3) * 0.014);
-      const large = stones.find((s) => x >= s.x0 && x < s.x1 && y >= s.y0 && y < s.y1);
-      const width = large.x1 - large.x0;
-      const height = large.y1 - large.y0;
-      const localX = (x - large.x0) / width;
-      const localY = (y - large.y0) / height;
-      const distance = polygonDistance(large.polygon, localX, localY, width, height);
+      const courseWarp = field(u, v, 6, 5, seed ^ 0x719d24b3) *
+        (tradition.name === 'stacked-slate' ? 0.004 : 0.012);
+      const vv = wrap(v + warpOffset + courseWarp);
+      let row = 0;
 
-      if (distance < 0.002) {
-        for (const pin of pinnings) {
-          const dx = wrap(x - pin.x + 0.5) - 0.5;
-          const dy = wrap(y - pin.y + 0.5) - 0.5;
-          if (Math.abs(dx) > pin.radius || Math.abs(dy) > pin.radius) continue;
+      while (row < rows - 1 && vv >= yBounds[row + 1]) row++;
 
-          const sx = 0.5 + dx / (pin.radius * 2);
-          const sy = 0.5 + dy / (pin.radius * 2);
-          const pinDistance = polygonDistance(pin.stone.polygon, sx, sy, pin.radius * 2, pin.radius * 2);
+      const course = courses[row];
+      const uu = wrap(u + course.offset);
+      let col = 0;
 
-          if (pinDistance > distance && pinDistance > -0.002) {
-            return { stone: pin.stone, x: sx, y: sy, distance: pinDistance };
-          }
-        }
-      }
+      while (col < course.xBounds.length - 2 && uu >= course.xBounds[col + 1]) col++;
 
-      return { stone: large, x: localX, y: localY, distance };
+      const localX = (uu - course.xBounds[col]) /
+        (course.xBounds[col + 1] - course.xBounds[col]);
+      const normalizedY = (vv - course.y0) / (course.y1 - course.y0);
+      const candidates = course.stones.filter((s) => s.x0 === course.xBounds[col]);
+      const stone = candidates.find((s) =>
+        normalizedY >= s.y0 && normalizedY <= s.y1) || candidates.at(-1);
+      const localY = (normalizedY - stone.y0) / (stone.y1 - stone.y0);
+
+      return {
+        stone,
+        x: localX,
+        y: localY,
+        distance: signedPolygonDistance(stone, localX, localY),
+      };
     },
   };
 }
