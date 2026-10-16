@@ -6,7 +6,7 @@ const materialInput = document.getElementById('material');
 const styleInput = document.getElementById('style');
 const seedInput = document.getElementById('seed');
 const sizeInput = document.getElementById('size');
-const generateButton = document.getElementById('generate');
+const newSeedButton = document.getElementById('new-seed');
 const status = document.getElementById('status');
 const viewport = document.getElementById('viewport');
 
@@ -79,11 +79,12 @@ function fillSelect(select, items) {
   }
 }
 
-async function requestPreview(options) {
+async function requestPreview(options, signal) {
   const response = await fetch('/api/textures/preview', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(options),
+    signal,
   });
 
   if (!response.ok) {
@@ -112,11 +113,32 @@ async function loadMap(base64, isColor, pixelated) {
   return texture;
 }
 
-async function generate() {
-  if (generateButton.disabled) return;
+let latestRequest = 0;
+let pendingGeneration;
+let activeRequest;
 
-  generateButton.disabled = true;
+function updatePreview(delay = 0) {
+  clearTimeout(pendingGeneration);
+  latestRequest++;
+  activeRequest?.abort();
+
+  if (!form.checkValidity()) {
+    setStatus('Select valid options and enter a seed from 0 to 4294967295.');
+    return;
+  }
+
+  const requestId = latestRequest;
+
   setStatus('Generating…');
+
+  pendingGeneration = setTimeout(() => {
+    void generate(requestId);
+  }, delay);
+}
+
+async function generate(requestId) {
+  const controller = new AbortController();
+  activeRequest = controller;
 
   try {
     const options = {
@@ -126,15 +148,32 @@ async function generate() {
       size: Number(sizeInput.value),
     };
 
-    const { maps } = await requestPreview(options);
-    const pixelated = options.style === 'retro-3d';
+    const { maps } = await requestPreview(options, controller.signal);
 
-    const [albedo, normal, roughness] = await Promise.all([
+    if (requestId !== latestRequest) return;
+
+    const pixelated = options.style === 'retro-3d';
+    const results = await Promise.allSettled([
       loadMap(maps.albedo, true, pixelated),
       loadMap(maps.normal, false, pixelated),
       loadMap(maps.roughness, false, pixelated),
     ]);
 
+    const loaded = results
+      .filter((result) => result.status === 'fulfilled')
+      .map((result) => result.value);
+
+    const failed = results.find((result) => result.status === 'rejected');
+
+    if (failed || requestId !== latestRequest) {
+      for (const texture of loaded) texture.dispose();
+
+      if (failed && requestId === latestRequest) throw failed.reason;
+
+      return;
+    }
+
+    const [albedo, normal, roughness] = loaded;
     const previous = [material.map, material.normalMap, material.roughnessMap];
 
     material.map = albedo;
@@ -148,15 +187,37 @@ async function generate() {
 
     setStatus('Seed ' + options.seed);
   } catch (error) {
-    setStatus(error.message);
+    if (requestId === latestRequest && error.name !== 'AbortError') {
+      setStatus(error.message);
+    }
   } finally {
-    generateButton.disabled = false;
+    if (activeRequest === controller) {
+      activeRequest = null;
+    }
   }
 }
 
+for (const select of [materialInput, styleInput, sizeInput]) {
+  select.addEventListener('change', () => updatePreview());
+}
+
+seedInput.addEventListener('input', () => updatePreview(180));
+
+newSeedButton.addEventListener('click', () => {
+  const previous = Number(seedInput.value);
+  const value = new Uint32Array(1);
+
+  do {
+    crypto.getRandomValues(value);
+  } while (value[0] === previous);
+
+  seedInput.value = String(value[0]);
+  updatePreview();
+});
+
 form.addEventListener('submit', (event) => {
   event.preventDefault();
-  void generate();
+  updatePreview();
 });
 
 async function initialize() {
@@ -175,7 +236,7 @@ async function initialize() {
     materialInput.value = 'oak-wood';
     styleInput.value = 'stylized-realism';
 
-    await generate();
+    updatePreview();
   } catch (error) {
     setStatus(error.message);
   }
