@@ -53,3 +53,33 @@ export function encodePng(width, height, rgba) {
     chunk('IEND', Buffer.alloc(0)),
   ]);
 }
+
+export function encodeGray16Png(width, height, grayscale) {
+  if (!(grayscale instanceof Uint16Array) || grayscale.length !== width * height) {
+    throw new TypeError('16-bit height samples must match the image dimensions');
+  }
+
+  const rowLength = width * 2;
+  const raw = Buffer.alloc(height * (rowLength + 1));
+
+  for (let y = 0; y < height; y++) {
+    const start = y * (rowLength + 1) + 1;
+
+    for (let x = 0; x < width; x++) {
+      raw.writeUInt16BE(grayscale[y * width + x], start + x * 2);
+    }
+  }
+
+  const header = Buffer.alloc(13);
+  header.writeUInt32BE(width, 0);
+  header.writeUInt32BE(height, 4);
+  header[8] = 16;
+  header[9] = 0;
+
+  return Buffer.concat([
+    signature,
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0)),
+  ]);
+}
