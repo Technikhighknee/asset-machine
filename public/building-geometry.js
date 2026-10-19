@@ -1,7 +1,6 @@
 import * as THREE from 'three';
 
 const MIN_EDGE = 0.35;
-const TWO_PI = Math.PI * 2;
 
 export function newBuilding() {
   return {
@@ -118,6 +117,21 @@ export function validateBuilding(building) {
   }
 
   if (!['auto', 'x', 'z'].includes(roof.ridge)) return 'Invalid ridge direction';
+
+  if (roof.type !== 'gable' && roof.overhang > 0) {
+    const eaves = expandedPolygon(points, roof.overhang);
+
+    for (let i = 0; i < eaves.length; i++) {
+      const a = eaves[i], b = eaves[(i + 1) % eaves.length];
+
+      for (let j = i + 2; j < eaves.length; j++) {
+        if ((j + 1) % eaves.length === i) continue;
+        if (intersects(a, b, eaves[j], eaves[(j + 1) % eaves.length])) {
+          return 'Roof overhang would intersect itself; reduce overhang';
+        }
+      }
+    }
+  }
   const frame = building.frame;
   if (!frame || typeof frame.enabled !== 'boolean' || !finite(frame.spacing) ||
     frame.spacing < 0.8 || frame.spacing > 5 ||
@@ -165,6 +179,35 @@ export function validateBuilding(building) {
   return null;
 }
 
+// Physical-space UVs prevent the same texture stretching across a 1 m
+// post and an 8 m wall. Material maps share these UV coordinates in GLB.
+function texturedBox(width, height, depth) {
+  const geo = new THREE.BoxGeometry(width, height, depth);
+  const positions = geo.getAttribute('position');
+  const normals = geo.getAttribute('normal');
+  const uv = geo.getAttribute('uv');
+  const texelMetres = 2;
+
+  for (let i = 0; i < positions.count; i++) {
+    const x = positions.getX(i);
+    const y = positions.getY(i);
+    const z = positions.getZ(i);
+    const nx = normals.getX(i);
+    const ny = normals.getY(i);
+
+    if (Math.abs(nx) > 0.5) {
+      uv.setXY(i, z / texelMetres, y / texelMetres);
+    } else if (Math.abs(ny) > 0.5) {
+      uv.setXY(i, x / texelMetres, z / texelMetres);
+    } else {
+      uv.setXY(i, x / texelMetres, y / texelMetres);
+    }
+  }
+
+  uv.needsUpdate = true;
+  return geo;
+}
+
 function beam(group, a, b, thickness, depth, material, name) {
   const start = new THREE.Vector3(...a);
   const end = new THREE.Vector3(...b);
@@ -172,7 +215,7 @@ function beam(group, a, b, thickness, depth, material, name) {
   const distance = delta.length();
   if (distance < 0.02) return;
 
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(thickness, distance, depth), material);
+  const mesh = new THREE.Mesh(texturedBox(thickness, distance, depth), material);
   mesh.position.copy(start).add(end).multiplyScalar(0.5);
   mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), delta.normalize());
   mesh.name = name;
@@ -181,7 +224,7 @@ function beam(group, a, b, thickness, depth, material, name) {
 
 function rectangleSolid(group, edge, left, right, bottom, top, depth, material, name) {
   if (right - left < 0.015 || top - bottom < 0.015) return;
-  const mesh = new THREE.Mesh(new THREE.BoxGeometry(right - left, top - bottom, depth), material);
+  const mesh = new THREE.Mesh(texturedBox(right - left, top - bottom, depth), material);
   const u = (left + right) / 2 / edge.distance;
 
   mesh.position.set(
@@ -373,6 +416,14 @@ export function buildBuilding(building, materials) {
   const floorBase = building.foundationHeight;
   const roofBase = floorBase + building.floors * building.floorHeight;
   const frame = building.frame;
+  let area = 0;
+
+  for (let i = 0; i < footprint.length; i++) {
+    const a = footprint[i], b = footprint[(i + 1) % footprint.length];
+    area += a.x * b.z - b.x * a.z;
+  }
+
+  const orientation = Math.sign(area);
   const foundation = new THREE.Group();
   foundation.name = 'Foundation';
   group.add(foundation);
@@ -394,8 +445,13 @@ export function buildBuilding(building, materials) {
     const a = footprint[i], b = footprint[(i + 1) % footprint.length];
     const dx = b.x - a.x, dz = b.z - a.z;
     const distance = length(a, b);
+    const outwardX = orientation * dz / distance;
+    const outwardZ = -orientation * dx / distance;
+    const trimOffset = building.wallThickness / 2 + frame.thickness * 0.35;
     const along = (station, y) => [
-      a.x + dx * station / distance, y, a.z + dz * station / distance,
+      a.x + dx * station / distance + outwardX * trimOffset,
+      y,
+      a.z + dz * station / distance + outwardZ * trimOffset,
     ];
     const edgeOpenings = building.openings.filter((o) => o.edge === i);
 
