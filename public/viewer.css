@@ -254,29 +254,14 @@ button:disabled {
     grid-row: 2;
   }
 
-  label[for="seed"] {
+  label[for="size"] {
     grid-column: 2;
     grid-row: 1;
   }
 
-  #seed {
+  #size {
     grid-column: 2;
     grid-row: 2;
-  }
-
-  label[for="size"] {
-    grid-column: 1;
-    grid-row: 3;
-  }
-
-  #size {
-    grid-column: 1;
-    grid-row: 4;
-  }
-
-  #new-seed {
-    grid-column: 2;
-    grid-row: 4;
   }
 
   button {

@@ -66,13 +66,13 @@ router.post('/preview', (req, res, next) => {
 
 router.post('/export', (req, res, next) => {
   try {
-    const { material, seed = 0, size = 2048, ...options } = req.body ?? {};
+    const { material, size = 2048 } = req.body ?? {};
 
     if (material !== 'roof-thatch' || size !== 2048) {
       throw new RangeError('2K PBR bundle export currently supports reed thatch only');
     }
 
-    const texture = generateTexture({ ...options, material, seed, size });
+    const texture = generateTexture({ material, size });
     const maps = texture.maps;
 
     const files = {
@@ -88,7 +88,7 @@ router.post('/export', (req, res, next) => {
 
     res.setHeader(
       'Content-Disposition',
-      'attachment; filename="reed-thatch-2k-' + seed + '.zip"',
+      'attachment; filename="reed-thatch-2k.zip"',
     );
     res.type('application/zip').send(zip);
   } catch (error) {

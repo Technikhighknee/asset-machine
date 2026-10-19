@@ -1,12 +1,19 @@
 import { oak } from './materials/oak.js';
 import { stone } from './materials/stone.js';
 import { thatch } from './materials/thatch.js';
-import { deriveSeed, field, random } from './random.js';
+import { field, random } from './random.js';
 
 const materials = Object.freeze({
   'roof-thatch': thatch,
   'oak-wood': oak,
   'rubble-stone': stone,
+});
+
+// Existing wood and stone algorithms still sample procedural fields.
+// Their inputs are fixed until those material recipes are revised.
+const materialSources = Object.freeze({
+  'oak-wood': { structure: 11912466, pigment: 3232379135, weather: 4032110199 },
+  'rubble-stone': { structure: 1239764765, pigment: 3451198784, weather: 2292292996 },
 });
 
 const clamp = (value) => Math.max(0, Math.min(255, Math.round(value)));
@@ -48,47 +55,21 @@ export function textureCatalog() {
 
 export function generateTexture({
   material: materialId,
-  seed = 0,
-  seeds: overrides = {},
   size = 256,
 } = {}) {
   const material = materials[materialId];
 
   if (!material) throw new RangeError('Unknown material');
 
-  if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
-    throw new RangeError('Seed must be an unsigned 32-bit integer');
-  }
-
   if (![128, 256, 512, 1024, 2048].includes(size)) {
     throw new RangeError('Texture size must be 128, 256, 512, 1024, or 2048');
   }
 
-  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
-    throw new TypeError('Seeds must be an object');
-  }
-
-  const roles = ['structure', 'pigment', 'weather'];
-
-  if (Object.keys(overrides).some((role) => !roles.includes(role))) {
-    throw new RangeError('Unknown seed role');
-  }
-
-  const seeds = {};
-
-  for (const role of roles) {
-    const value = overrides[role] ?? deriveSeed(seed, materialId + ':' + role);
-
-    if (!Number.isSafeInteger(value) || value < 0 || value > 0xffffffff) {
-      throw new RangeError('Each seed must be an unsigned 32-bit integer');
-    }
-
-    seeds[role] = value;
-  }
-
   if (material.generate) {
-    return material.generate({ size, seeds });
+    return material.generate({ size });
   }
+
+  const seeds = materialSources[materialId];
 
   const sample = material.create({
     structure: random(seeds.structure),

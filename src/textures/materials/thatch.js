@@ -1,5 +1,5 @@
-// Original overlapping reed-bundle texture, kept independent of artstyle presets.
-// Native raster: 2048 px. Smaller previews are box-filtered from it.
+// Curated reed-thatch material. Fiber colors retain the original appearance.
+// Geometry follows softened, directional straw ridges instead of noisy peaks.
 
 const BASE_SIZE = 512;
 const SIZE = 2048;
@@ -35,15 +35,18 @@ function periodicNoise(x, y, cells, seed) {
 }
 
 // Independent bundles of tapered straw overlap instead of forming courses.
-function renderThatch(seeds) {
+function renderThatch() {
   const count = SIZE * SIZE;
   const albedo = new Float32Array(count * 3);
   const height = new Float32Array(count);
   const roughness = new Float32Array(count);
   const coverage = new Float32Array(count);
-  const pattern = seeds.pattern >>> 0;
-  const color = seeds.color >>> 0;
-  const weather = seeds.weather >>> 0;
+  const strandRelief = new Float32Array(count);
+
+  // Fixed material recipe. No externally selectable variations.
+  const pattern = 337244588;
+  const color = 4127832849;
+  const weather = 3039914881;
 
   for (let y = 0; y < SIZE; y++) {
     for (let x = 0; x < SIZE; x++) {
@@ -57,13 +60,13 @@ function renderThatch(seeds) {
       albedo[index * 3] = 0.49 + tone;
       albedo[index * 3 + 1] = 0.36 + tone * 0.80;
       albedo[index * 3 + 2] = 0.215 + tone * 0.65;
-      // Material relief depends on the structure seed, never the pigment.
-      const bedding = periodicNoise(x, y, 29, pattern ^ 0x4e8a16cc) - 0.5;
-      const fibers = periodicNoise(x, y, 79, pattern ^ 0x193ae587) - 0.5;
+      // Broad, shallow substrate: no high-frequency random bumps in height.
+      const bedding = periodicNoise(x, y, 9, pattern ^ 0x4e8a16cc) - 0.5;
+      const texture = periodicNoise(x, y, 29, pattern ^ 0x193ae587) - 0.5;
       const weathering = periodicNoise(x, y, 21, weather ^ 0x7cbf9ab3) - 0.5;
 
-      height[index] = 0.16 + bedding * 0.042 + fibers * 0.022;
-      roughness[index] = clamp(0.89 + bedding * 0.035 + weathering * 0.070, 0.72, 0.99);
+      height[index] = 0.5 + bedding * 0.006;
+      roughness[index] = clamp(0.89 + texture * 0.035 + weathering * 0.070, 0.72, 0.99);
     }
   }
 
@@ -128,8 +131,11 @@ function renderThatch(seeds) {
           albedo[offset + 2] = mix(albedo[offset + 2], blue, alpha);
 
           const center = 1 - clamp(distance / (width + 0.25 * SCALE), 0, 1);
-          // The raised fiber cross-section is the common source of the PBR relief.
-          height[index] = mix(height[index], 0.18 + ridge * center, alpha * 0.8);
+          // Represent strand direction as ridges, not randomly stacked peaks.
+          // The highest coherent shaft wins; later strokes cannot pile height.
+          const shaft = fiberCoverage * (0.3 + center * 0.7) *
+            (0.85 + ridge * 0.25);
+          strandRelief[index] = Math.max(strandRelief[index], shaft);
           coverage[index] = mix(coverage[index], 1, alpha);
           roughness[index] = mix(
             roughness[index],
@@ -141,29 +147,51 @@ function renderThatch(seeds) {
     }
   }
 
+  // Smooth across the strands just enough to avoid isolated sharp pixels,
+  // then smooth farther along their direction to retain elongated fibers.
+  const horizontal = new Float32Array(count);
+
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const row = y * SIZE;
+      horizontal[row + x] = (
+        strandRelief[row + wrap(x - 2, SIZE)] +
+        strandRelief[row + wrap(x - 1, SIZE)] * 4 +
+        strandRelief[row + x] * 6 +
+        strandRelief[row + wrap(x + 1, SIZE)] * 4 +
+        strandRelief[row + wrap(x + 2, SIZE)]
+      ) / 16;
+    }
+  }
+
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const index = y * SIZE + x;
+      const ridge = (
+        horizontal[wrap(y - 4, SIZE) * SIZE + x] +
+        horizontal[wrap(y - 2, SIZE) * SIZE + x] * 2 +
+        horizontal[index] * 4 +
+        horizontal[wrap(y + 2, SIZE) * SIZE + x] * 2 +
+        horizontal[wrap(y + 4, SIZE) * SIZE + x]
+      ) / 10;
+
+      height[index] = clamp(
+        0.5 + (height[index] - 0.5) * 5 + (ridge - 0.18) * 0.36,
+        0.15,
+        0.85,
+      );
+    }
+  }
+
   return { albedo, height, roughness, coverage };
 }
 
 let lastThatch = null;
 
-function thatchData(seeds) {
-  if (!lastThatch ||
-      lastThatch.pattern !== seeds.structure ||
-      lastThatch.color !== seeds.pigment ||
-      lastThatch.weather !== seeds.weather) {
-    lastThatch = {
-      pattern: seeds.structure,
-      color: seeds.pigment,
-      weather: seeds.weather,
-      data: renderThatch({
-        pattern: seeds.structure,
-        color: seeds.pigment,
-        weather: seeds.weather,
-      }),
-    };
-  }
+function thatchData() {
+  if (!lastThatch) lastThatch = renderThatch();
 
-  return lastThatch.data;
+  return lastThatch;
 }
 
 function packTextures(source, size) {
@@ -236,7 +264,7 @@ function packTextures(source, size) {
   // All spatial derivatives use the same full-precision height surface.
   // Wrapped neighbors keep the maps tileable without artificially welding edges.
   const at = (x, y) => heights[wrap(y, size) * size + wrap(x, size)];
-  const normalStrength = 1.8 * size / BASE_SIZE;
+  const normalStrength = 0.33 * size / BASE_SIZE;
   const directions = [
     [-1, 0], [1, 0], [0, -1], [0, 1],
     [-1, -1], [1, -1], [-1, 1], [1, 1],
@@ -303,7 +331,7 @@ function packTextures(source, size) {
 export const thatch = {
   label: 'Reed Thatch',
 
-  generate({ size, seeds }) {
-    return packTextures(thatchData(seeds), size);
+  generate({ size }) {
+    return packTextures(thatchData(), size);
   },
 };

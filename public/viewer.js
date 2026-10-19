@@ -4,11 +4,9 @@ import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const form = document.getElementById('texture-form');
 const materialInput = document.getElementById('material');
-const seedInput = document.getElementById('seed');
 const sizeInput = document.getElementById('size');
 const inspectMapInput = document.getElementById('inspect-map');
 const exportButton = document.getElementById('export-pbr');
-const newSeedButton = document.getElementById('new-seed');
 const status = document.getElementById('status');
 const viewport = document.getElementById('viewport');
 const imagePreview = document.getElementById('image-preview');
@@ -69,8 +67,10 @@ const material = new THREE.MeshStandardMaterial({
   normalScale: new THREE.Vector2(1, 1),
   aoMapIntensity: 0.8,
   envMapIntensity: 0.8,
-  displacementScale: 0.085,
-  displacementBias: -0.028,
+  // Keep actual geometry displacement subtle; normal detail does the
+  // close-up shading. Large displacement on UV-sphere poles forms spikes.
+  displacementScale: 0.012,
+  displacementBias: -0.006,
 });
 
 // Provide a second UV channel for AO workflows as well.
@@ -79,6 +79,13 @@ geometry.setAttribute('uv1', geometry.getAttribute('uv').clone());
 
 const sphere = new THREE.Mesh(geometry, material);
 scene.add(sphere);
+
+// A flat counterpart separates material-height quality from sphere UV distortion.
+const planeGeometry = new THREE.PlaneGeometry(2, 2, 256, 256);
+planeGeometry.setAttribute('uv1', planeGeometry.getAttribute('uv').clone());
+const plane = new THREE.Mesh(planeGeometry, material);
+plane.visible = false;
+scene.add(plane);
 
 const textureLoader = new THREE.TextureLoader();
 
@@ -100,6 +107,8 @@ renderer.setAnimationLoop(() => {
 
 function setPreviewMode(mode) {
   preview.classList.toggle('image-mode', mode === 'image');
+  sphere.visible = mode === 'sphere';
+  plane.visible = mode === 'plane';
 
   for (const button of viewModeButtons) {
     button.setAttribute('aria-pressed', String(button.dataset.previewMode === mode));
@@ -178,8 +187,8 @@ function updateSphereSurface() {
   }
 
   material.normalScale.set(relief, relief);
-  material.displacementScale = 0.085 * relief;
-  material.displacementBias = -0.028 * relief;
+  material.displacementScale = 0.012 * relief;
+  material.displacementBias = -0.006 * relief;
 }
 
 tilingInput.addEventListener('change', updateSphereSurface);
@@ -205,7 +214,7 @@ function updatePreview(delay = 0) {
   activeRequest?.abort();
 
   if (!form.checkValidity()) {
-    setStatus('Select valid options and enter a seed from 0 to 4294967295.');
+    setStatus('Select a material and resolution.');
     return;
   }
 
@@ -225,7 +234,6 @@ async function generate(requestId) {
   try {
     const options = {
       material: materialInput.value,
-      seed: Number(seedInput.value),
       size: Number(sizeInput.value),
     };
 
@@ -274,7 +282,7 @@ async function generate(requestId) {
       texture?.dispose();
     }
 
-    setStatus('Seed ' + options.seed);
+    setStatus('Material ready');
   } catch (error) {
     if (requestId === latestRequest && error.name !== 'AbortError') {
       setStatus(error.message);
@@ -297,11 +305,10 @@ exportButton.addEventListener('click', async () => {
   setStatus('Exporting 2048 × 2048 PBR maps…');
 
   try {
-    const seed = Number(seedInput.value);
     const response = await fetch('/api/textures/export', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ material: 'roof-thatch', seed, size: 2048 }),
+      body: JSON.stringify({ material: 'roof-thatch', size: 2048 }),
     });
 
     if (!response.ok) {
@@ -314,7 +321,7 @@ exportButton.addEventListener('click', async () => {
     const link = document.createElement('a');
 
     link.href = url;
-    link.download = 'reed-thatch-2k-' + seed + '.zip';
+    link.download = 'reed-thatch-2k.zip';
     document.body.append(link);
     link.click();
     link.remove();
@@ -331,20 +338,6 @@ exportButton.addEventListener('click', async () => {
 for (const select of [materialInput, sizeInput]) {
   select.addEventListener('change', () => updatePreview());
 }
-
-seedInput.addEventListener('input', () => updatePreview(180));
-
-newSeedButton.addEventListener('click', () => {
-  const previous = Number(seedInput.value);
-  const value = new Uint32Array(1);
-
-  do {
-    crypto.getRandomValues(value);
-  } while (value[0] === previous);
-
-  seedInput.value = String(value[0]);
-  updatePreview();
-});
 
 form.addEventListener('submit', (event) => {
   event.preventDefault();
