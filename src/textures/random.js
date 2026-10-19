@@ -19,16 +19,6 @@ export function random(seed) {
   };
 }
 
-export function deriveSeed(seed, label) {
-  let hash = (2166136261 ^ seed) >>> 0;
-
-  for (const character of label) {
-    hash = Math.imul(hash ^ character.charCodeAt(0), 16777619) >>> 0;
-  }
-
-  return hash;
-}
-
 export function hash(x, y, seed) {
   let value = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ seed;
   value = Math.imul(value ^ (value >>> 13), 1274126177);
