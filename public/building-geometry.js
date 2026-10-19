@@ -389,7 +389,7 @@ function expandedPolygon(points, overhang) {
     const n2 = { x: orientation * b.z / bl, z: -orientation * b.x / bl };
     const avg = { x: n1.x + n2.x, z: n1.z + n2.z };
     const denominator = Math.max(0.5, 1 + n1.x * n2.x + n1.z * n2.z);
-    const miter = Math.min(overhang * 2, overhang * 2 / denominator);
+    const miter = Math.min(overhang * 2, overhang / denominator);
     return { x: p.x + avg.x * miter, z: p.z + avg.z * miter };
   });
 }
