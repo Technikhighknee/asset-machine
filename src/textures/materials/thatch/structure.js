@@ -25,7 +25,11 @@ const RECIPE = Object.freeze({
 
 function clamp(v, a = 0, b = 1) {return Math.max(a, Math.min(b, v))}
 
-function wrap(v, n) {return ((v%n)+n)%n}
+function wrap(v, n) {
+  const result = v % n;
+
+  return result < 0 ? result + n : result;
+}
 
 function fade(v) {v = clamp(v); return v*v*(3-2*v)}
 

@@ -2,8 +2,6 @@
 
 function clamp(v, a = 0, b = 1) {return Math.max(a, Math.min(b, v))}
 
-function wrap(v, n) {return ((v%n)+n)%n}
-
 function gray(map, o, v) {
   const byte = Math.round(clamp(v)*255);
   map[o] = byte; map[o+1] = byte; map[o+2] = byte; map[o+3] = 255;
@@ -42,14 +40,23 @@ export function makeReedPbr(surface, size) {
       maps.normal[o+3] = 255;
       const neighborhood = (left+right+up+down+
       at(x-2, y)+at(x+2, y))/6;
-      gray(maps.cavity, o, clamp(1-Math.max(0, neighborhood-level)*240, 0.68, 1));
+      const compression = clamp((0.508 - surface.coarse[i]) / 0.008);
+
+      gray(maps.cavity, o, clamp(
+        1 - Math.max(0, neighborhood-level)*360 - compression*0.10,
+        0.63,
+        1,
+      ));
       const first = (at(x-8, y)+at(x+8, y)+at(x, y-8)+at(x, y+8))/4;
       const second = (at(x-27, y)+at(x+27, y)+at(x, y-27)+at(x, y+27))/4;
       const horizon = 
       Math.max(0, first-level)/(0.022+8/size*0.22)+
       Math.max(0, second-level)/(0.022+27/size*0.22);
-      const indent = Math.max(0, 0.505-surface.coarse[i])*2;
-      gray(maps.ao, o, clamp(1-horizon*0.42-indent, 0.6, 1));
+      gray(maps.ao, o, clamp(
+        1 - horizon*0.68 - compression*0.125,
+        0.62,
+        1,
+      ));
     }
   }
   return {width: size, height: size, maps, height16};
