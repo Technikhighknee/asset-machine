@@ -245,6 +245,15 @@ function polygonSlab(points, upper, thickness, material, name) {
   const indices = [];
   const scale = 1 / 2.2;
 
+  function triangle(a, b, c) {
+    const start = positions.length / 3;
+    for (const p of [a, b, c]) {
+      positions.push(p.x, p.y, p.z);
+      uvs.push(p.x * scale, p.z * scale);
+    }
+    indices.push(start, start + 1, start + 2);
+  }
+
   function quad(a, b, c, d) {
     const start = positions.length / 3;
     for (const p of [a, b, c, d]) {
@@ -261,10 +270,12 @@ function polygonSlab(points, upper, thickness, material, name) {
     const top = [points[i], points[j], points[k]].map((p) =>
       ({ x: p.x, y: upper(p), z: p.z })
     );
-    // Double-sided slab with its own underside.
-    quad(top[0], top[1], top[2], top[2]);
-    const bottom = top.map((p) => ({ ...p, y: p.y - thickness }));
-    quad(bottom[2], bottom[1], bottom[0], bottom[0]);
+    // Top normals point up in Y, regardless of footprint winding.
+    const winding = cross(points[i], points[j], points[k]);
+    const ordered = winding > 0 ? [top[0], top[2], top[1]] : top;
+    triangle(...ordered);
+    const bottom = ordered.map((p) => ({ ...p, y: p.y - thickness }));
+    triangle(bottom[2], bottom[1], bottom[0]);
   }
 
   for (let i = 0; i < points.length; i++) {
