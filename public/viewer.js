@@ -14,7 +14,8 @@ const tiledPreview = document.getElementById('tiled-preview');
 const preview = document.querySelector('.preview');
 const viewModeButtons = document.querySelectorAll('[data-preview-mode]');
 const tilingInput = document.getElementById('sphere-tiling');
-const reliefInput = document.getElementById('sphere-relief');
+const normalInput = document.getElementById('sphere-normal');
+const displacementInput = document.getElementById('sphere-displacement');
 
 const renderer = new THREE.WebGLRenderer({
   canvas: viewport,
@@ -67,10 +68,10 @@ const material = new THREE.MeshStandardMaterial({
   normalScale: new THREE.Vector2(1, 1),
   aoMapIntensity: 0.8,
   envMapIntensity: 0.8,
-  // Keep actual geometry displacement subtle; normal detail does the
-  // close-up shading. Large displacement on UV-sphere poles forms spikes.
-  displacementScale: 0.012,
-  displacementBias: -0.006,
+  // Height must not deform the sphere until explicitly requested.
+  // UV-sphere poles distort physical displacement and can mislead material QA.
+  displacementScale: 0,
+  displacementBias: 0,
 });
 
 // Provide a second UV channel for AO workflows as well.
@@ -171,7 +172,8 @@ let previewMaps = null;
 // These settings affect only the sphere, never the exported material maps.
 function updateSphereSurface() {
   const repeat = Number(tilingInput.value);
-  const relief = Number(reliefInput.value);
+  const normalStrength = Number(normalInput.value);
+  const geometryDisplacement = Number(displacementInput.value);
 
   for (const texture of [
     material.map,
@@ -186,13 +188,14 @@ function updateSphereSurface() {
     }
   }
 
-  material.normalScale.set(relief, relief);
-  material.displacementScale = 0.012 * relief;
-  material.displacementBias = -0.006 * relief;
+  material.normalScale.set(normalStrength, normalStrength);
+  material.displacementScale = geometryDisplacement;
+  material.displacementBias = -geometryDisplacement * 0.5;
 }
 
 tilingInput.addEventListener('change', updateSphereSurface);
-reliefInput.addEventListener('input', updateSphereSurface);
+normalInput.addEventListener('input', updateSphereSurface);
+displacementInput.addEventListener('input', updateSphereSurface);
 
 function showSelectedMap() {
   if (!previewMaps) return;
