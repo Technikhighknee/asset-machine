@@ -2,29 +2,37 @@
 // Native raster: 512 px. Preview resolutions are box-filtered from that raster.
 
 const SIZE = 512;
-const fract = (x) => x - Math.floor(x);
-const wrap = (n, size) => ((n % size) + size) % size;
+
+const fract = (value) => value - Math.floor(value);
+const wrap = (value, size) => ((value % size) + size) % size;
 const mix = (a, b, t) => a * (1 - t) + b * t;
-const clamp = (v, a = 0, b = 255) => Math.max(a, Math.min(b, v));
-const smooth = (t) => t * t * (3 - 2 * t);
-const hash = (x, y, seed) => {
-  let n=(Math.imul(x,374761393)^Math.imul(y,668265263)^seed)>>>0;
-  n=Math.imul(n^(n>>>13),1274126177)>>>0;
-  return ((n^(n>>>16))>>>0)/4294967295;
-};
-// Tileable value noise prevents a visible seam when the material repeats.
-// Fine scales supply fiber dust and weathering, not rows of shingles.
-function periodicNoise(x, y, cells, seed) {
-  const u=x*cells/SIZE,v=y*cells/SIZE;
-  const cx=Math.floor(u),cy=Math.floor(v),fx=smooth(fract(u)),fy=smooth(fract(v));
-  const a=hash(wrap(cx,cells),wrap(cy,cells),seed);
-  const b=hash(wrap(cx+1,cells),wrap(cy,cells),seed);
-  const c=hash(wrap(cx,cells),wrap(cy+1,cells),seed);
-  const d=hash(wrap(cx+1,cells),wrap(cy+1,cells),seed);
-  return mix(mix(a,b,fx),mix(c,d,fx),fy);
+const clamp = (value, min = 0, max = 255) => Math.max(min, Math.min(max, value));
+const smooth = (value) => value * value * (3 - 2 * value);
+
+function hash(x, y, seed) {
+  let value = (Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ seed) >>> 0;
+  value = Math.imul(value ^ (value >>> 13), 1274126177) >>> 0;
+
+  return ((value ^ (value >>> 16)) >>> 0) / 4294967295;
 }
 
+// Tileable noise adds fine fiber dust and weathering, without roof-tile rows.
+function periodicNoise(x, y, cells, seed) {
+  const u = x * cells / SIZE;
+  const v = y * cells / SIZE;
+  const cx = Math.floor(u);
+  const cy = Math.floor(v);
+  const fx = smooth(fract(u));
+  const fy = smooth(fract(v));
+  const a = hash(wrap(cx, cells), wrap(cy, cells), seed);
+  const b = hash(wrap(cx + 1, cells), wrap(cy, cells), seed);
+  const c = hash(wrap(cx, cells), wrap(cy + 1, cells), seed);
+  const d = hash(wrap(cx + 1, cells), wrap(cy + 1, cells), seed);
 
+  return mix(mix(a, b, fx), mix(c, d, fx), fy);
+}
+
+// Independent bundles of tapered straw overlap instead of forming courses.
 function renderThatch(seeds) {
   const count = SIZE * SIZE;
   const albedo = new Float32Array(count * 3);
@@ -32,73 +40,92 @@ function renderThatch(seeds) {
   const roughness = new Float32Array(count);
   const pattern = seeds.pattern >>> 0;
   const color = seeds.color >>> 0;
-  for(let y=0;y<SIZE;y++)for(let x=0;x<SIZE;x++){
-    const i=y*SIZE+x;
-    const broad=periodicNoise(x,y,7,color^0x56430b2d)-.5;
-    const medium=periodicNoise(x,y,29,color^0x4e8a16cc)-.5;
-    const fine=periodicNoise(x,y,79,pattern^0x193ae587)-.5;
-    const grain=hash(x,y,color^0x72de20f3)-.5;
-    const t=broad*.17+medium*.075+fine*.044+grain*.037;
-    albedo[i*3]=.49+t;
-    albedo[i*3+1]=.36+t*.80;
-    albedo[i*3+2]=.215+t*.65;
-    height[i]=.16+medium*.055+fine*.038;
-    roughness[i]=.91+medium*.05+fine*.025+grain*.02;
+
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      const index = y * SIZE + x;
+      const broad = periodicNoise(x, y, 7, color ^ 0x56430b2d) - 0.5;
+      const medium = periodicNoise(x, y, 29, color ^ 0x4e8a16cc) - 0.5;
+      const fine = periodicNoise(x, y, 79, pattern ^ 0x193ae587) - 0.5;
+      const grain = hash(x, y, color ^ 0x72de20f3) - 0.5;
+      const tone = broad * 0.17 + medium * 0.075 + fine * 0.044 + grain * 0.037;
+
+      albedo[index * 3] = 0.49 + tone;
+      albedo[index * 3 + 1] = 0.36 + tone * 0.80;
+      albedo[index * 3 + 2] = 0.215 + tone * 0.65;
+      height[index] = 0.16 + medium * 0.055 + fine * 0.038;
+      roughness[index] = 0.91 + medium * 0.05 + fine * 0.025 + grain * 0.02;
+    }
   }
 
-  // Structure and color have separate seeded streams.
   let state = (pattern ^ 0xa56be231) >>> 0;
-  const random = () => {
-    state=(state+0x6d2b79f5)>>>0;
-    let z=state;
-    z=Math.imul(z^(z>>>15),z|1);
-    z^=z+Math.imul(z^(z>>>7),z|61);
-    return ((z^(z>>>14))>>>0)/4294967296;
-  };
+
+  function random() {
+    state = (state + 0x6d2b79f5) >>> 0;
+
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  }
+
   for (let bundle = 0; bundle < 1850; bundle++) {
-    const cx=random()*SIZE,cy=random()*SIZE;
-    const spread=5+random()*12;
-    const tilt=(random()-.5)*.24;
-    const sway=(random()-.5)*6;
-    const bundleTone=(hash(bundle,0,color^0x8f1a4dc7)-.5)*.21;
-    const strands=8+Math.floor(random()*10);
+    const cx = random() * SIZE;
+    const cy = random() * SIZE;
+    const spread = 5 + random() * 12;
+    const tilt = (random() - 0.5) * 0.24;
+    const sway = (random() - 0.5) * 6;
+    const bundleTone = (hash(bundle, 0, color ^ 0x8f1a4dc7) - 0.5) * 0.21;
+    const strands = 8 + Math.floor(random() * 10);
+
     for (let fiber = 0; fiber < strands; fiber++) {
-      const startX=cx+(random()-.5)*spread;
-      const startY=cy+(random()-.5)*18;
-      const length=18+random()*72;
-      const bend=(random()-.5)*4;
-      const width=.46+random()*1.05;
-      const strandTone=bundleTone+(hash(bundle,fiber,color)-.5)*.18;
-      const red=clamp(.48+strandTone,.25,.72);
-      const green=clamp(.36+strandTone*.81,.18,.60);
-      const blue=clamp(.20+strandTone*.66,.09,.40);
-      const ridge=.27+random()*.20;
-      const direction=tilt+(random()-.5)*.14;
-      const steps=Math.ceil(length);
+      const startX = cx + (random() - 0.5) * spread;
+      const startY = cy + (random() - 0.5) * 18;
+      const length = 18 + random() * 72;
+      const bend = (random() - 0.5) * 4;
+      const width = 0.46 + random() * 1.05;
+      const strandTone = bundleTone + (hash(bundle, fiber, color) - 0.5) * 0.18;
+      const red = clamp(0.48 + strandTone, 0.25, 0.72);
+      const green = clamp(0.36 + strandTone * 0.81, 0.18, 0.60);
+      const blue = clamp(0.20 + strandTone * 0.66, 0.09, 0.40);
+      const ridge = 0.27 + random() * 0.20;
+      const direction = tilt + (random() - 0.5) * 0.14;
+      const steps = Math.ceil(length);
+
       for (let step = 0; step <= steps; step++) {
-        const t=step/steps;
-        const tip=Math.min(1,step/4,(steps-step)/8);
-        if(tip<=0)continue;
-        const yy=wrap(Math.floor(startY+step),SIZE);
-        const xx=startX+direction*step+(sway+bend)*Math.sin(t*Math.PI);
-        const minX=Math.floor(xx-width-1),maxX=Math.ceil(xx+width+1);
+        const t = step / steps;
+        const tip = Math.min(1, step / 4, (steps - step) / 8);
+
+        if (tip <= 0) continue;
+
+        const y = wrap(Math.floor(startY + step), SIZE);
+        const centerX = startX + direction * step + (sway + bend) * Math.sin(t * Math.PI);
+        const minX = Math.floor(centerX - width - 1);
+        const maxX = Math.ceil(centerX + width + 1);
+
         for (let x = minX; x <= maxX; x++) {
-          const distance=Math.abs((x+.5)-xx);
-          const coverage=clamp(width+.5-distance,0,1)*tip;
-          if(coverage<=0)continue;
-          const i=yy*SIZE+wrap(x,SIZE);
-          const alpha=coverage*.74;
-          const offset=i*3;
-          albedo[offset]=mix(albedo[offset],red,alpha);
-          albedo[offset+1]=mix(albedo[offset+1],green,alpha);
-          albedo[offset+2]=mix(albedo[offset+2],blue,alpha);
-          const center=1-clamp(distance/(width+.25),0,1);
-          height[i]=mix(height[i],.18+ridge*center,alpha*.8);
-          roughness[i]=mix(roughness[i],.86+strandTone*.10,alpha*.65);
+          const distance = Math.abs((x + 0.5) - centerX);
+          const coverage = clamp(width + 0.5 - distance, 0, 1) * tip;
+
+          if (coverage <= 0) continue;
+
+          const index = y * SIZE + wrap(x, SIZE);
+          const alpha = coverage * 0.74;
+          const offset = index * 3;
+
+          albedo[offset] = mix(albedo[offset], red, alpha);
+          albedo[offset + 1] = mix(albedo[offset + 1], green, alpha);
+          albedo[offset + 2] = mix(albedo[offset + 2], blue, alpha);
+
+          const center = 1 - clamp(distance / (width + 0.25), 0, 1);
+          height[index] = mix(height[index], 0.18 + ridge * center, alpha * 0.8);
+          roughness[index] = mix(roughness[index], 0.86 + strandTone * 0.10, alpha * 0.65);
         }
       }
     }
   }
+
   return { albedo, height, roughness };
 }
 
