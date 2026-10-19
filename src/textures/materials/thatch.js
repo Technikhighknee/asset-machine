@@ -1,7 +1,9 @@
 // Original overlapping reed-bundle texture, kept independent of artstyle presets.
-// Native raster: 512 px. Preview resolutions are box-filtered from that raster.
+// Native raster: 2048 px. Smaller previews are box-filtered from it.
 
-const SIZE = 512;
+const BASE_SIZE = 512;
+const SIZE = 2048;
+const SCALE = SIZE / BASE_SIZE;
 
 const fract = (value) => value - Math.floor(value);
 const wrap = (value, size) => ((value % size) + size) % size;
@@ -73,18 +75,18 @@ function renderThatch(seeds) {
   for (let bundle = 0; bundle < 1850; bundle++) {
     const cx = random() * SIZE;
     const cy = random() * SIZE;
-    const spread = 5 + random() * 12;
+    const spread = (5 + random() * 12) * SCALE;
     const tilt = (random() - 0.5) * 0.24;
-    const sway = (random() - 0.5) * 6;
+    const sway = (random() - 0.5) * 6 * SCALE;
     const bundleTone = (hash(bundle, 0, color ^ 0x8f1a4dc7) - 0.5) * 0.21;
     const strands = 8 + Math.floor(random() * 10);
 
     for (let fiber = 0; fiber < strands; fiber++) {
       const startX = cx + (random() - 0.5) * spread;
-      const startY = cy + (random() - 0.5) * 18;
-      const length = 18 + random() * 72;
-      const bend = (random() - 0.5) * 4;
-      const width = 0.46 + random() * 1.05;
+      const startY = cy + (random() - 0.5) * 18 * SCALE;
+      const length = (18 + random() * 72) * SCALE;
+      const bend = (random() - 0.5) * 4 * SCALE;
+      const width = (0.46 + random() * 1.05) * SCALE;
       const strandTone = bundleTone + (hash(bundle, fiber, color) - 0.5) * 0.18;
       const red = clamp(0.48 + strandTone, 0.25, 0.72);
       const green = clamp(0.36 + strandTone * 0.81, 0.18, 0.60);
@@ -95,18 +97,18 @@ function renderThatch(seeds) {
 
       for (let step = 0; step <= steps; step++) {
         const t = step / steps;
-        const tip = Math.min(1, step / 4, (steps - step) / 8);
+        const tip = Math.min(1, step / (4 * SCALE), (steps - step) / (8 * SCALE));
 
         if (tip <= 0) continue;
 
         const y = wrap(Math.floor(startY + step), SIZE);
         const centerX = startX + direction * step + (sway + bend) * Math.sin(t * Math.PI);
-        const minX = Math.floor(centerX - width - 1);
-        const maxX = Math.ceil(centerX + width + 1);
+        const minX = Math.floor(centerX - width - SCALE);
+        const maxX = Math.ceil(centerX + width + SCALE);
 
         for (let x = minX; x <= maxX; x++) {
           const distance = Math.abs((x + 0.5) - centerX);
-          const coverage = clamp(width + 0.5 - distance, 0, 1) * tip;
+          const coverage = clamp((width + SCALE * 0.5 - distance) / SCALE, 0, 1) * tip;
 
           if (coverage <= 0) continue;
 
@@ -118,7 +120,7 @@ function renderThatch(seeds) {
           albedo[offset + 1] = mix(albedo[offset + 1], green, alpha);
           albedo[offset + 2] = mix(albedo[offset + 2], blue, alpha);
 
-          const center = 1 - clamp(distance / (width + 0.25), 0, 1);
+          const center = 1 - clamp(distance / (width + 0.25 * SCALE), 0, 1);
           height[index] = mix(height[index], 0.18 + ridge * center, alpha * 0.8);
           roughness[index] = mix(roughness[index], 0.86 + strandTone * 0.10, alpha * 0.65);
         }
@@ -146,8 +148,12 @@ function thatchData(seeds) {
 }
 
 function packTextures(source, size) {
-  // Filter the native 512 px raster for lower-resolution previews.
+  // Filter the native 2048 px raster for lower-resolution previews.
   const step = SIZE / size;
+
+  if (!Number.isInteger(step) || step < 1) {
+    throw new RangeError('Thatch resolution must divide 2048');
+  }
   const count = size * size;
   const albedo = new Uint8Array(count * 4);
   const roughness = new Uint8Array(count * 4);
@@ -202,8 +208,10 @@ function packTextures(source, size) {
       const right = heights[y * size + wrap(x + 1, size)];
       const up = heights[wrap(y - 1, size) * size + x];
       const down = heights[wrap(y + 1, size) * size + x];
-      const dx = (right - left) * 1.8;
-      const dy = (down - up) * 1.8;
+      // Match the material-space normal strength at every output resolution.
+      const normalStrength = 1.8 * size / BASE_SIZE;
+      const dx = (right - left) * normalStrength;
+      const dy = (down - up) * normalStrength;
       const length = Math.hypot(dx, dy, 1);
       const dst = (y * size + x) * 4;
 

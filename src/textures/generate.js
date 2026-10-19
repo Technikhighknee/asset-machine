@@ -57,8 +57,8 @@ export function generateTexture({
     throw new RangeError('Seed must be an unsigned 32-bit integer');
   }
 
-  if (![128, 256, 512].includes(size)) {
-    throw new RangeError('Texture size must be 128, 256, or 512');
+  if (![128, 256, 512, 1024, 2048].includes(size)) {
+    throw new RangeError('Texture size must be 128, 256, 512, 1024, or 2048');
   }
 
   if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides)) {
