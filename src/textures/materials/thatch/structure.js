@@ -2,58 +2,26 @@
 
 const TAU = Math.PI * 2;
 
-const RECIPE = {
-  "rows": 16,
-  "columns": 43,
-  "fibers": 39,
-  "sheafWidth": 0.027,
-  "sheafLength": 0.155,
-  "baseHeight": 0.5,
-  "bundleLift": 0.007,
-  "strandLift": 0.0012,
-  "pigments": [
-  [
-  0.44,
-  0.32,
-  0.193
+const RECIPE = Object.freeze({
+  rows: 16,
+  columns: 43,
+  fibers: 39,
+  sheafWidth: 0.027,
+  sheafLength: 0.155,
+  baseHeight: 0.5,
+  bundleLift: 0.007,
+  strandLift: 0.0012,
+  pigments: [
+    [0.44, 0.32, 0.193],
+    [0.49, 0.363, 0.218],
+    [0.555, 0.433, 0.269],
+    [0.381, 0.275, 0.163],
+    [0.597, 0.465, 0.292],
+    [0.468, 0.327, 0.182],
+    [0.535, 0.382, 0.222],
+    [0.42, 0.3, 0.177],
   ],
-  [
-  0.49,
-  0.363,
-  0.218
-  ],
-  [
-  0.555,
-  0.433,
-  0.269
-  ],
-  [
-  0.381,
-  0.275,
-  0.163
-  ],
-  [
-  0.597,
-  0.465,
-  0.292
-  ],
-  [
-  0.468,
-  0.327,
-  0.182
-  ],
-  [
-  0.535,
-  0.382,
-  0.222
-  ],
-  [
-  0.42,
-  0.3,
-  0.177
-  ]
-  ]
-};
+});
 
 function clamp(v, a = 0, b = 1) {return Math.max(a, Math.min(b, v))}
 
