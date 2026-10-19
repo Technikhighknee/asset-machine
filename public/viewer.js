@@ -5,6 +5,8 @@ const form = document.getElementById('texture-form');
 const materialInput = document.getElementById('material');
 const seedInput = document.getElementById('seed');
 const sizeInput = document.getElementById('size');
+const inspectMapInput = document.getElementById('inspect-map');
+const exportButton = document.getElementById('export-pbr');
 const newSeedButton = document.getElementById('new-seed');
 const status = document.getElementById('status');
 const viewport = document.getElementById('viewport');
@@ -129,6 +131,21 @@ async function loadMap(base64, isColor) {
 let latestRequest = 0;
 let pendingGeneration;
 let activeRequest;
+let previewMaps = null;
+
+function showSelectedMap() {
+  if (!previewMaps) return;
+
+  const key = inspectMapInput.value;
+  const image = previewMaps[key] || previewMaps.albedo;
+  const url = 'data:image/png;base64,' + image;
+
+  imagePreview.src = url;
+  imagePreview.alt = key + ' texture preview';
+  tiledPreview.style.backgroundImage = 'url("' + url + '")';
+}
+
+inspectMapInput.addEventListener('change', showSelectedMap);
 
 function updatePreview(delay = 0) {
   clearTimeout(pendingGeneration);
@@ -194,10 +211,8 @@ async function generate(requestId) {
     material.displacementMap = height;
     material.needsUpdate = true;
 
-    const image = 'data:image/png;base64,' + maps.albedo;
-
-    imagePreview.src = image;
-    tiledPreview.style.backgroundImage = 'url("' + image + '")';
+    previewMaps = maps;
+    showSelectedMap();
 
     for (const texture of previous) {
       texture?.dispose();
@@ -214,6 +229,48 @@ async function generate(requestId) {
     }
   }
 }
+
+materialInput.addEventListener('change', () => {
+  exportButton.disabled = materialInput.value !== 'roof-thatch';
+});
+
+exportButton.addEventListener('click', async () => {
+  if (!form.checkValidity() || materialInput.value !== 'roof-thatch') return;
+
+  exportButton.disabled = true;
+  setStatus('Exporting 2048 × 2048 PBR maps…');
+
+  try {
+    const seed = Number(seedInput.value);
+    const response = await fetch('/api/textures/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ material: 'roof-thatch', seed, size: 2048 }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new Error(error.error || 'PBR export failed');
+    }
+
+    const zip = await response.blob();
+    const url = URL.createObjectURL(zip);
+    const link = document.createElement('a');
+
+    link.href = url;
+    link.download = 'reed-thatch-2k-' + seed + '.zip';
+    document.body.append(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+    setStatus('PBR ZIP ready · 2048 × 2048');
+  } catch (error) {
+    setStatus(error.message);
+  } finally {
+    exportButton.disabled = materialInput.value !== 'roof-thatch';
+  }
+});
 
 for (const select of [materialInput, sizeInput]) {
   select.addEventListener('change', () => updatePreview());
@@ -251,6 +308,7 @@ async function initialize() {
     fillSelect(materialInput, catalog.materials);
 
     materialInput.value = 'roof-thatch';
+    exportButton.disabled = false;
 
     updatePreview();
   } catch (error) {
