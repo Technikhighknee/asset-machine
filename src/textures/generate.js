@@ -38,8 +38,11 @@ export function textureCatalog() {
     materials: Object.entries(materials).map(([id, material]) => ({
       id,
       label: material.label,
+      maps: material.generate
+        ? ['albedo', 'normal', 'roughness', 'height', 'ao', 'cavity']
+        : ['albedo', 'normal', 'roughness', 'height'],
     })),
-    maps: ['albedo', 'normal', 'roughness', 'height'],
+    maps: ['albedo', 'normal', 'roughness', 'height', 'ao', 'cavity'],
   };
 }
 
