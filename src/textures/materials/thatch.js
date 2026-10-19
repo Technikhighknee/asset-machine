@@ -176,7 +176,8 @@ function renderThatch() {
       ) / 10;
 
       height[index] = clamp(
-        0.5 + (height[index] - 0.5) * 5 + (ridge - 0.18) * 0.36,
+        0.5 + (height[index] - 0.5) * 5 +
+          (Math.max(0.53, ridge) - 0.83) * 0.64,
         0.15,
         0.85,
       );
@@ -264,7 +265,7 @@ function packTextures(source, size) {
   // All spatial derivatives use the same full-precision height surface.
   // Wrapped neighbors keep the maps tileable without artificially welding edges.
   const at = (x, y) => heights[wrap(y, size) * size + wrap(x, size)];
-  const normalStrength = 0.33 * size / BASE_SIZE;
+  const normalStrength = 0.72 * size / BASE_SIZE;
   const directions = [
     [-1, 0], [1, 0], [0, -1], [0, 1],
     [-1, -1], [1, -1], [-1, 1], [1, 1],
@@ -305,8 +306,8 @@ function packTextures(source, size) {
         }
       }
 
-      const cavityValue = clamp(1 - localRecess / 8 * 9.5, 0.28, 1);
-      const aoValue = clamp(1 - horizon / (directions.length * 3) * 0.47, 0.35, 1);
+      const cavityValue = clamp(1 - localRecess / 8 * 7.5, 0.5, 1);
+      const aoValue = clamp(1 - horizon / (directions.length * 3) * 0.32, 0.5, 1);
       const cavityByte = Math.round(cavityValue * 255);
       const aoByte = Math.round(aoValue * 255);
 
