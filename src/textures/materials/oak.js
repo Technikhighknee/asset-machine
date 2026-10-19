@@ -26,8 +26,7 @@ function boardWidths(count, structure) {
 export const oak = {
   label: 'Oak Wood',
 
-  create({ structure, pigment, weather, style, seeds }) {
-    const grammar = style.grammar;
+  create({ structure, pigment, weather, seeds }) {
     const finish = structure.int(0, 3);
 
     // Clear-cut timber, sawn boards, hand-hewn timber or knotty reclaimed wood.
@@ -35,13 +34,13 @@ export const oak = {
       : finish === 1 ? structure.int(2, 6)
         : finish === 2 ? structure.int(1, 3) : structure.int(3, 7);
 
-    const boards = Math.max(1, Math.round(count * grammar.density));
+    const boards = count;
     const horizontal = structure.float() < 0.5;
     const boundaries = boardWidths(boards, structure);
 
     const fibers = 2 * (finish === 2 ? structure.int(3, 7) : structure.int(9, 19));
-    const bend = structure.range(0.015, 0.09) * grammar.irregularity;
-    const seamWidth = finish === 0 ? 0 : structure.range(0.004, 0.013) * grammar.edgeWidth;
+    const bend = structure.range(0.015, 0.09);
+    const seamWidth = finish === 0 ? 0 : structure.range(0.004, 0.013);
     const grainRelief = structure.range(0.02, 0.055);
     const base = pigment.pick(palettes);
     const contrast = pigment.range(16, 48);
@@ -73,7 +72,7 @@ export const oak = {
       const along = horizontal ? u : v;
 
       const crooked = field(across, along, boards * 2, 5, seeds.structure ^ 0x9b462ed1);
-      const position = wrap(across + crooked * seamWidth * grammar.irregularity);
+      const position = wrap(across + crooked * seamWidth);
 
       let board = 0;
 
@@ -131,10 +130,10 @@ export const oak = {
       }
 
       const grainStrength = finish === 2 ? 0.4 : finish === 0 ? 0.65 : 1;
-      const tone = boardTone + rings * 17 * grammar.detail * grainStrength +
-        brush * 24 * grammar.detail + natural * 21 - knotDark * 34 -
+      const tone = boardTone + rings * 17 * grainStrength +
+        brush * 24 + natural * 21 - knotDark * 34 -
         age * wear * 130 + facets * 46 - crack * 65;
-      const height = 0.52 + rings * grainRelief * grammar.detail * grainStrength +
+      const height = 0.52 + rings * grainRelief * grainStrength +
         fine * 0.025 - knotDark * 0.035 - seam * 0.16 +
         facets * 0.075 - crack * 0.12;
 

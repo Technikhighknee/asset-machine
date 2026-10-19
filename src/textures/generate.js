@@ -1,7 +1,6 @@
 import { oak } from './materials/oak.js';
 import { stone } from './materials/stone.js';
-import { deriveSeed, random } from './random.js';
-import { styles } from './styles.js';
+import { deriveSeed, field, random } from './random.js';
 
 const materials = Object.freeze({
   'oak-wood': oak,
@@ -38,26 +37,19 @@ export function textureCatalog() {
       id,
       label: material.label,
     })),
-    styles: Object.entries(styles).map(([id, style]) => ({
-      id,
-      label: style.label,
-    })),
     maps: ['albedo', 'normal', 'roughness', 'height'],
   };
 }
 
 export function generateTexture({
   material: materialId,
-  style: styleId = 'stylized-realism',
   seed = 0,
   seeds: overrides = {},
   size = 256,
 } = {}) {
   const material = materials[materialId];
-  const style = styles[styleId];
 
   if (!material) throw new RangeError('Unknown material');
-  if (!style) throw new RangeError('Unknown artstyle');
 
   if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xffffffff) {
     throw new RangeError('Seed must be an unsigned 32-bit integer');
@@ -93,12 +85,10 @@ export function generateTexture({
     structure: random(seeds.structure),
     pigment: random(seeds.pigment),
     weather: random(seeds.weather),
-    style,
     seeds,
   });
 
-  const step = style.pixelSize;
-  const resolution = size / step;
+  const resolution = size;
   const period = resolution - 1;
   const pixels = resolution * resolution;
 
@@ -115,13 +105,10 @@ export function generateTexture({
       const v = y / period;
       const surface = sample(u, v);
 
-      const color = style.paint(surface, {
-        x,
-        y,
-        u,
-        v,
-        pigmentSeed: seeds.pigment,
-      });
+      const broad = field(u, v, 7, 9, seeds.pigment ^ 0x89144d31) * 8;
+      const fine = field(u, v, 43, 39, seeds.pigment) * 4;
+      const tone = (surface.height - 0.5) * 15 + broad + fine - surface.edge * 7;
+      const color = surface.color.map((channel) => clamp(channel + tone));
 
       setPixel(albedo, index, color);
 
@@ -142,8 +129,8 @@ export function generateTexture({
       const up = heights[((y + period - 1) % period) * resolution + x];
       const down = heights[((y + 1) % period) * resolution + x];
 
-      const dx = (left - right) * style.normalStrength;
-      const dy = (up - down) * style.normalStrength;
+      const dx = (left - right) * 3.2;
+      const dy = (up - down) * 3.2;
       const length = Math.hypot(dx, dy, 1);
 
       setPixel(normals, index, [
@@ -160,24 +147,5 @@ export function generateTexture({
     closeEdges(image, resolution);
   }
 
-  if (step === 1) {
-    return { width: size, height: size, maps };
-  }
-
-  const expanded = {};
-
-  for (const [name, pixels] of Object.entries(maps)) {
-    const image = new Uint8Array(size * size * 4);
-
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
-        const source = (Math.floor(y / step) * resolution + Math.floor(x / step)) * 4;
-        image.set(pixels.subarray(source, source + 4), (y * size + x) * 4);
-      }
-    }
-
-    expanded[name] = image;
-  }
-
-  return { width: size, height: size, maps: expanded };
+  return { width: size, height: size, maps };
 }

@@ -3,7 +3,6 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 const form = document.getElementById('texture-form');
 const materialInput = document.getElementById('material');
-const styleInput = document.getElementById('style');
 const seedInput = document.getElementById('seed');
 const sizeInput = document.getElementById('size');
 const newSeedButton = document.getElementById('new-seed');
@@ -113,7 +112,7 @@ async function requestPreview(options, signal) {
   return response.json();
 }
 
-async function loadMap(base64, isColor, pixelated) {
+async function loadMap(base64, isColor) {
   const texture = await textureLoader.loadAsync('data:image/png;base64,' + base64);
 
   texture.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
@@ -121,11 +120,6 @@ async function loadMap(base64, isColor, pixelated) {
   texture.wrapT = THREE.RepeatWrapping;
   texture.repeat.set(4, 4);
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-
-  if (pixelated) {
-    texture.magFilter = THREE.NearestFilter;
-    texture.minFilter = THREE.NearestMipmapNearestFilter;
-  }
 
   texture.needsUpdate = true;
 
@@ -162,7 +156,6 @@ async function generate(requestId) {
   try {
     const options = {
       material: materialInput.value,
-      style: styleInput.value,
       seed: Number(seedInput.value),
       size: Number(sizeInput.value),
     };
@@ -171,12 +164,11 @@ async function generate(requestId) {
 
     if (requestId !== latestRequest) return;
 
-    const pixelated = options.style === 'retro-3d';
     const results = await Promise.allSettled([
-      loadMap(maps.albedo, true, pixelated),
-      loadMap(maps.normal, false, pixelated),
-      loadMap(maps.roughness, false, pixelated),
-      loadMap(maps.height, false, pixelated),
+      loadMap(maps.albedo, true),
+      loadMap(maps.normal, false),
+      loadMap(maps.roughness, false),
+      loadMap(maps.height, false),
     ]);
 
     const loaded = results
@@ -207,9 +199,6 @@ async function generate(requestId) {
     imagePreview.src = image;
     tiledPreview.style.backgroundImage = 'url("' + image + '")';
 
-    imagePreview.classList.toggle('pixelated', pixelated);
-    tiledPreview.classList.toggle('pixelated', pixelated);
-
     for (const texture of previous) {
       texture?.dispose();
     }
@@ -226,7 +215,7 @@ async function generate(requestId) {
   }
 }
 
-for (const select of [materialInput, styleInput, sizeInput]) {
+for (const select of [materialInput, sizeInput]) {
   select.addEventListener('change', () => updatePreview());
 }
 
@@ -254,16 +243,14 @@ async function initialize() {
     const response = await fetch('/api/textures');
 
     if (!response.ok) {
-      throw new Error('Failed to load materials and styles');
+      throw new Error('Failed to load materials');
     }
 
     const catalog = await response.json();
 
     fillSelect(materialInput, catalog.materials);
-    fillSelect(styleInput, catalog.styles);
 
     materialInput.value = 'oak-wood';
-    styleInput.value = 'stylized-realism';
 
     updatePreview();
   } catch (error) {

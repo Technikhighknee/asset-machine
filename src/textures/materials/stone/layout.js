@@ -79,18 +79,18 @@ function polygonDistance(stone, u, v) {
   return Math.sqrt(distanceSq) * (inside ? 1 : -1);
 }
 
-export function buildWall(random, grammar, seed) {
+export function buildWall(random, seed) {
   const tradition = random.pick(traditions);
   const bins = 160;
-  const mortar = random.range(...tradition.mortar) * grammar.edgeWidth;
+  const mortar = random.range(...tradition.mortar);
   const skyline = new Float64Array(bins);
   const previousIds = new Int32Array(bins);
   const ceiling = new Float64Array(bins);
   const stones = [];
   const offsetX = random.float();
   const offsetY = random.float();
-  const minWidth = 0.063 / Math.sqrt(grammar.density);
-  const maxWidth = tradition.width[1] / Math.sqrt(grammar.density);
+  const minWidth = 0.063;
+  const maxWidth = tradition.width[1];
   const minHeight = tradition.height[0] * 0.78;
 
   function place(x0, width, y0, height) {

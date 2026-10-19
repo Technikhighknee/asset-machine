@@ -163,11 +163,6 @@ button:disabled {
   background-size: 50% 50%;
 }
 
-#image-preview.pixelated,
-#tiled-preview.pixelated {
-  image-rendering: pixelated;
-}
-
 .preview.image-mode {
   display: flex;
   align-items: center;
@@ -229,14 +224,29 @@ button:disabled {
     grid-row: 2;
   }
 
-  label[for="style"] {
+  label[for="seed"] {
     grid-column: 2;
     grid-row: 1;
   }
 
-  #style {
+  #seed {
     grid-column: 2;
     grid-row: 2;
+  }
+
+  label[for="size"] {
+    grid-column: 1;
+    grid-row: 3;
+  }
+
+  #size {
+    grid-column: 1;
+    grid-row: 4;
+  }
+
+  #new-seed {
+    grid-column: 2;
+    grid-row: 4;
   }
 
   button {

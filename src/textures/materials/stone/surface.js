@@ -54,7 +54,7 @@ function mortarGrains(u, v, columns, rows, seed) {
   return { chips, pale, pits };
 }
 
-export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
+export function makeSurface({ structure, pigment, weather, seeds }) {
   const rock = pigment.pick(geology);
   const mortarType = pigment.range(0.82, 1.11);
   const weatherLevel = weather.range(0.04, 0.29);
@@ -106,7 +106,7 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
       fbm(u, v, 7, 8, seeds.weather ^ 0x08ac135d, 3)) * weatherLevel;
     const contact = 1 - smooth(0.0015, 0.014, Math.max(0, -distance));
     const exposure = smooth(-0.23, 0.27, mortarBody + trowel * 0.28);
-    const grainStrength = (grammar.painted ? 0.38 : 1) * (0.4 + exposure * 0.6);
+    const grainStrength = 0.4 + exposure * 0.6;
     const grainRelief = (aggregate.chips * 0.013 + aggregate.pale * 0.017 -
       aggregate.pits * 0.021 + sand.chips * 0.008 +
       sand.pale * 0.009 - sand.pits * 0.012) * grainStrength;
@@ -117,8 +117,8 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
       sand.pits * 28) * grainStrength;
     const mortarColor = rock.mortar.map((channel, i) =>
       channel * mortarType + mortarBody * 11 + trowel * 8 +
-      mortarGrit * (grammar.painted ? 4 : 13) +
-      mortarDust * (grammar.painted ? 1 : 6) +
+      mortarGrit * 13 +
+      mortarDust * 6 +
       sandTint * (i === 2 ? 0.93 : 1) - mortarStain * 26 - contact * 42
     );
     const mortarRoughness = clamp(0.86 + Math.abs(mortarGrit) * 0.07 +
@@ -144,7 +144,7 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
     const chippedEdge = field(x, y, 11, 9, p.structureSeed ^ 0x10933ada) * 0.0034;
     const inset = distance + chippedEdge;
     const inRock = smooth(-0.0018, 0.0015, inset);
-    const bevel = smooth(0, 0.0045 * grammar.edgeWidth, inset);
+    const bevel = smooth(0, 0.0045, inset);
 
     const axisX = Math.cos(p.fractureAngle);
     const axisY = Math.sin(p.fractureAngle);
@@ -173,9 +173,9 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
     const shape = 0.61 + stone.proud + slope +
       (cut * p.fractureDepth + secondCut * p.fractureDepth * 0.6) *
       (stone.face === 'weathered-rubble' ? 0.48 : 1) +
-      faceNoise * 0.075 * stone.slab + fractured * (grammar.painted ? 0.017 : 0.049) +
-      fine * (grammar.painted ? 0.002 : 0.017) +
-      grain * (grammar.painted ? 0.001 : 0.008) +
+      faceNoise * 0.075 * stone.slab + fractured * 0.049 +
+      fine * 0.017 +
+      grain * 0.008 +
       strata - chips * 0.048 - porous * 0.029 - crack * 0.056;
     const stoneHeight = shape * (0.85 + bevel * 0.15);
     const height = mix(mortarHeight, stoneHeight, inRock);
@@ -191,8 +191,8 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
       Math.max(0, field(u, v, 14, 3, seeds.weather ^ 0x6194bc13)) *
       weatherLevel * 0.24;
     const mineral = mineralZones * 20 * broadContrast +
-      speckles * 11 * grammar.detail + lamina;
-    const cavity = 1 - smooth(0.0005, 0.0045 * grammar.edgeWidth, g);
+      speckles * 11 + lamina;
+    const cavity = 1 - smooth(0.0005, 0.0045, g);
 
     const color = p.color.map((channel, i) => {
       const stoneColor = channel +
@@ -206,9 +206,9 @@ export function makeSurface({ structure, pigment, weather, seeds, grammar }) {
 
     const roughness = clamp(mix(
       mortarRoughness,
-      (grammar.painted ? 0.83 : p.roughness) +
-      Math.abs(fine) * (grammar.painted ? 0.015 : 0.09) +
-      porous * (grammar.painted ? 0.04 : 0.13) +
+      p.roughness +
+      Math.abs(fine) * 0.09 +
+      porous * 0.13 +
       chips * 0.1 + dirt * 0.12,
       inRock
     ));
