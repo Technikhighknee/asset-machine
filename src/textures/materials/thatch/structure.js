@@ -63,11 +63,13 @@ function fade(v){v=clamp(v);return v*v*(3-2*v)}
 
 function hash(x,y){let n=(Math.imul(x+17,374761393)^Math.imul(y+73,668265263))>>>0;n=Math.imul(n^(n>>>13),1274126177)>>>0;return((n^(n>>>16))>>>0)/4294967296}
 
-function noise(u,v,nx,ny){
+function noise(u,v,nx,ny,lattice){
  const ax=u*nx,ay=v*ny,x=Math.floor(ax),y=Math.floor(ay);
  const tx=fade(ax-x),ty=fade(ay-y);
- const a=hash(wrap(x,nx),wrap(y,ny)),b=hash(wrap(x+1,nx),wrap(y,ny));
- const c=hash(wrap(x,nx),wrap(y+1,ny)),d=hash(wrap(x+1,nx),wrap(y+1,ny));
+ const left=wrap(x,nx),right=wrap(x+1,nx);
+ const top=wrap(y,ny)*nx,bottom=wrap(y+1,ny)*nx;
+ const a=lattice[top+left],b=lattice[top+right];
+ const c=lattice[bottom+left],d=lattice[bottom+right];
  return (a+(b-a)*tx)*(1-ty)+(c+(d-c)*tx)*ty;
 }
 
@@ -75,11 +77,21 @@ export function makeReedSurface(size){
  const n=size*size,p=RECIPE;
  const color=new Float32Array(n*3),coarse=new Float32Array(n);
  const fiberRelief=new Float32Array(n),roughness=new Float32Array(n);
+
+ const broadLattice=new Float32Array(5*7);
+ const detailLattice=new Float32Array(17*23);
+ for(let y=0;y<7;y++){
+  for(let x=0;x<5;x++)broadLattice[y*5+x]=hash(x,y);
+ }
+ for(let y=0;y<23;y++){
+  for(let x=0;x<17;x++)detailLattice[y*17+x]=hash(x+53,y+41);
+ }
+
  for(let y=0;y<size;y++){
   for(let x=0;x<size;x++){
    const i=y*size+x,u=x/size,v=y/size;
-   const tone=(noise(u,v,5,7)-0.5)*0.10+
-    (noise(u,v,17,23)-0.5)*0.035;
+   const tone=(noise(u,v,5,7,broadLattice)-0.5)*0.10+
+    (noise(u,v,17,23,detailLattice)-0.5)*0.035;
    color[i*3]=0.425+tone;
    color[i*3+1]=0.306+tone*0.84;
    color[i*3+2]=0.178+tone*0.68;
