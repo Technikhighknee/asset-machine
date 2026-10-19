@@ -115,12 +115,12 @@ function renderThatch(seeds) {
 
         for (let x = minX; x <= maxX; x++) {
           const distance = Math.abs((x + 0.5) - centerX);
-          const coverage = clamp((width + SCALE * 0.5 - distance) / SCALE, 0, 1) * tip;
+          const fiberCoverage = clamp((width + SCALE * 0.5 - distance) / SCALE, 0, 1) * tip;
 
-          if (coverage <= 0) continue;
+          if (fiberCoverage <= 0) continue;
 
           const index = y * SIZE + wrap(x, SIZE);
-          const alpha = coverage * 0.74;
+          const alpha = fiberCoverage * 0.74;
           const offset = index * 3;
 
           albedo[offset] = mix(albedo[offset], red, alpha);
