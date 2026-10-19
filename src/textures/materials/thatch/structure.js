@@ -150,5 +150,41 @@ export function makeReedSurface(size) {
     roughness[i] = clamp(p.baseRoughness - exposure[i] * 0.035, 0.82, 0.98);
   }
 
+  // Smooth the geometric ridge edges across the straw, then farther along
+  // each fiber. Pigment stays untouched and every axis wraps at the tile edge.
+  const horizontal = new Float32Array(count);
+
+  for (let y = 0; y < size; y++) {
+    const row = y * size;
+
+    for (let x = 0; x < size; x++) {
+      horizontal[row + x] = (
+        height[row + wrap(x - 2, size)] +
+        height[row + wrap(x - 1, size)] * 4 +
+        height[row + x] * 6 +
+        height[row + wrap(x + 1, size)] * 4 +
+        height[row + wrap(x + 2, size)]
+      ) / 16;
+    }
+  }
+
+  for (let y = 0; y < size; y++) {
+    const above2 = wrap(y - 2, size) * size;
+    const above1 = wrap(y - 1, size) * size;
+    const below1 = wrap(y + 1, size) * size;
+    const below2 = wrap(y + 2, size) * size;
+
+    for (let x = 0; x < size; x++) {
+      const i = y * size + x;
+      height[i] = (
+        horizontal[above2 + x] +
+        horizontal[above1 + x] * 4 +
+        horizontal[i] * 6 +
+        horizontal[below1 + x] * 4 +
+        horizontal[below2 + x]
+      ) / 16;
+    }
+  }
+
   return { color, height, roughness };
 }

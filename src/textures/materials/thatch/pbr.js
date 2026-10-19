@@ -50,8 +50,8 @@ export function makeReedPbr(surface, size) {
       const down = at(x, y + 1);
 
       // OpenGL (+Y), using derivatives in normalized material coordinates.
-      const sx = (right - left) * size * 0.20;
-      const sy = (down - up) * size * 0.20;
+      const sx = (right - left) * size * 0.035;
+      const sy = (down - up) * size * 0.035;
       const invLength = 1 / Math.hypot(sx, sy, 1);
 
       maps.normal[offset] = Math.round((1 - sx * invLength) * 127.5);
