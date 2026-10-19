@@ -127,6 +127,35 @@ button:disabled {
   color: #fff;
 }
 
+.sphere-settings {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto 72px;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  border: 1px solid #454b55;
+  border-radius: 8px;
+  background: #252a30e8;
+}
+
+.sphere-settings label {
+  margin: 0;
+}
+
+.sphere-settings select,
+.sphere-settings input {
+  width: 72px;
+}
+
+.sphere-settings input {
+  accent-color: #80a8ec;
+  padding: 0;
+}
+
 .image-comparison {
   display: none;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -170,7 +199,8 @@ button:disabled {
 }
 
 .preview.image-mode #viewport,
-.preview.image-mode .hint {
+.preview.image-mode .hint,
+.preview.image-mode .sphere-settings {
   display: none;
 }
 
@@ -255,5 +285,17 @@ button:disabled {
 
   #status {
     margin: 12px 0 0;
+  }
+
+  .sphere-settings {
+    bottom: 14px;
+    right: 14px;
+    padding: 8px 10px;
+  }
+
+  .hint {
+    bottom: 7px;
+    left: 16px;
+    transform: none;
   }
 }

@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 const form = document.getElementById('texture-form');
 const materialInput = document.getElementById('material');
@@ -14,6 +15,8 @@ const imagePreview = document.getElementById('image-preview');
 const tiledPreview = document.getElementById('tiled-preview');
 const preview = document.querySelector('.preview');
 const viewModeButtons = document.querySelectorAll('[data-preview-mode]');
+const tilingInput = document.getElementById('sphere-tiling');
+const reliefInput = document.getElementById('sphere-relief');
 
 const renderer = new THREE.WebGLRenderer({
   canvas: viewport,
@@ -22,37 +25,59 @@ const renderer = new THREE.WebGLRenderer({
 
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.18;
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x15171a);
+scene.background = new THREE.Color(0x1c2129);
 
-const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
-camera.position.set(0, 0, 3.25);
+// Broad studio reflections reveal material roughness without baking light into albedo.
+const pmremGenerator = new THREE.PMREMGenerator(renderer);
+const studio = new RoomEnvironment();
+scene.environment = pmremGenerator.fromScene(studio, 0.04).texture;
+studio.dispose();
+pmremGenerator.dispose();
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+camera.position.set(0, 0, 3.4);
 
 const controls = new OrbitControls(camera, viewport);
 controls.enableDamping = true;
-controls.minDistance = 1.6;
+controls.minDistance = 1.25;
 controls.maxDistance = 7;
+controls.update();
 
-scene.add(new THREE.HemisphereLight(0xffffff, 0x6e7583, 1.8));
+// Separate frontal, grazing and rim lighting preserves relief and shading.
+scene.add(new THREE.HemisphereLight(0xdfe9ff, 0x3a322b, 0.55));
 
-const keyLight = new THREE.DirectionalLight(0xffffff, 2.5);
-keyLight.position.set(3, 4, 5);
+const keyLight = new THREE.DirectionalLight(0xfff2df, 2.25);
+keyLight.position.set(3.5, 3, 5);
 scene.add(keyLight);
 
-const fillLight = new THREE.DirectionalLight(0xffffff, 1.1);
-fillLight.position.set(-4, 1, -3);
-scene.add(fillLight);
+const grazingLight = new THREE.DirectionalLight(0xe6efff, 1.1);
+grazingLight.position.set(-4, 1.2, 1);
+scene.add(grazingLight);
+
+const rimLight = new THREE.DirectionalLight(0xffffff, 0.75);
+rimLight.position.set(0, -1, -4);
+scene.add(rimLight);
 
 const material = new THREE.MeshStandardMaterial({
   color: 0xffffff,
   roughness: 1,
   metalness: 0,
-  displacementScale: 0.045,
-  displacementBias: -0.0225,
+  normalScale: new THREE.Vector2(1, 1),
+  aoMapIntensity: 0.8,
+  envMapIntensity: 0.8,
+  displacementScale: 0.085,
+  displacementBias: -0.028,
 });
 
-const sphere = new THREE.Mesh(new THREE.SphereGeometry(1, 512, 384), material);
+// Provide a second UV channel for AO workflows as well.
+const geometry = new THREE.SphereGeometry(1, 512, 384);
+geometry.setAttribute('uv1', geometry.getAttribute('uv').clone());
+
+const sphere = new THREE.Mesh(geometry, material);
 scene.add(sphere);
 
 const textureLoader = new THREE.TextureLoader();
@@ -120,7 +145,8 @@ async function loadMap(base64, isColor) {
   texture.colorSpace = isColor ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;
-  texture.repeat.set(4, 4);
+  const tiling = Number(tilingInput.value);
+  texture.repeat.set(tiling, tiling);
   texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
 
   texture.needsUpdate = true;
@@ -132,6 +158,32 @@ let latestRequest = 0;
 let pendingGeneration;
 let activeRequest;
 let previewMaps = null;
+
+// These settings affect only the sphere, never the exported material maps.
+function updateSphereSurface() {
+  const repeat = Number(tilingInput.value);
+  const relief = Number(reliefInput.value);
+
+  for (const texture of [
+    material.map,
+    material.normalMap,
+    material.roughnessMap,
+    material.displacementMap,
+    material.aoMap,
+  ]) {
+    if (texture) {
+      texture.repeat.set(repeat, repeat);
+      texture.needsUpdate = true;
+    }
+  }
+
+  material.normalScale.set(relief, relief);
+  material.displacementScale = 0.085 * relief;
+  material.displacementBias = -0.028 * relief;
+}
+
+tilingInput.addEventListener('change', updateSphereSurface);
+reliefInput.addEventListener('input', updateSphereSurface);
 
 function showSelectedMap() {
   if (!previewMaps) return;
@@ -181,17 +233,13 @@ async function generate(requestId) {
 
     if (requestId !== latestRequest) return;
 
-    const results = await Promise.allSettled([
-      loadMap(maps.albedo, true),
-      loadMap(maps.normal, false),
-      loadMap(maps.roughness, false),
-      loadMap(maps.height, false),
-    ]);
-
+    const names = ['albedo', 'normal', 'roughness', 'height', 'ao'];
+    const results = await Promise.allSettled(names.map((name) =>
+      maps[name] ? loadMap(maps[name], name === 'albedo') : Promise.resolve(null)
+    ));
     const loaded = results
-      .filter((result) => result.status === 'fulfilled')
+      .filter((result) => result.status === 'fulfilled' && result.value)
       .map((result) => result.value);
-
     const failed = results.find((result) => result.status === 'rejected');
 
     if (failed || requestId !== latestRequest) {
@@ -202,14 +250,22 @@ async function generate(requestId) {
       return;
     }
 
-    const [albedo, normal, roughness, height] = loaded;
-    const previous = [material.map, material.normalMap, material.roughnessMap, material.displacementMap];
+    const [albedo, normal, roughness, height, ao] = results.map((result) => result.value);
+    const previous = [
+      material.map,
+      material.normalMap,
+      material.roughnessMap,
+      material.displacementMap,
+      material.aoMap,
+    ];
 
     material.map = albedo;
     material.normalMap = normal;
     material.roughnessMap = roughness;
     material.displacementMap = height;
+    material.aoMap = ao;
     material.needsUpdate = true;
+    updateSphereSurface();
 
     previewMaps = maps;
     showSelectedMap();

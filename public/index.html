@@ -55,6 +55,18 @@
     </aside>
 
     <main class="preview">
+      <div class="sphere-settings">
+        <label for="sphere-tiling">Tiling</label>
+        <select id="sphere-tiling">
+          <option value="1">1×</option>
+          <option value="2" selected>2×</option>
+          <option value="4">4×</option>
+        </select>
+
+        <label for="sphere-relief">Relief</label>
+        <input id="sphere-relief" type="range" min="0" max="2" step="0.1" value="1">
+      </div>
+
       <div class="view-modes" role="group" aria-label="Preview mode">
         <button type="button" data-preview-mode="sphere" aria-pressed="true">Sphere</button>
         <button type="button" data-preview-mode="image" aria-pressed="false">Image</button>
