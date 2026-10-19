@@ -250,7 +250,7 @@ async function initialize() {
 
     fillSelect(materialInput, catalog.materials);
 
-    materialInput.value = 'oak-wood';
+    materialInput.value = 'roof-thatch';
 
     updatePreview();
   } catch (error) {

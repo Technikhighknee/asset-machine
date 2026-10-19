@@ -1,8 +1,10 @@
 import { oak } from './materials/oak.js';
 import { stone } from './materials/stone.js';
+import { thatch } from './materials/thatch.js';
 import { deriveSeed, field, random } from './random.js';
 
 const materials = Object.freeze({
+  'roof-thatch': thatch,
   'oak-wood': oak,
   'rubble-stone': stone,
 });
@@ -79,6 +81,10 @@ export function generateTexture({
     }
 
     seeds[role] = value;
+  }
+
+  if (material.generate) {
+    return material.generate({ size, seeds });
   }
 
   const sample = material.create({
