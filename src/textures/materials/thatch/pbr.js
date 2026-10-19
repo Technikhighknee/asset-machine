@@ -31,12 +31,16 @@ export function makeReedPbr(surface, size) {
       gray(maps.height, o, packed);
       gray(maps.roughness, o, rough[i]);
       const left = at(x-1, y), right = at(x+1, y), up = at(x, y-1), down = at(x, y+1);
-      const dx = (right-left)*size*0.16;
-      const dy = (down-up)*size*0.16;
-      const inv = 1/Math.hypot(dx, dy, 1);
-      maps.normal[o] = Math.round((1-dx*inv)*127.5);
-      maps.normal[o+1] = Math.round((1-dy*inv)*127.5);
-      maps.normal[o+2] = Math.round((1+inv)*127.5);
+      // Height describes broad bundles; visible fibers supply independent
+      // tangent slopes. Their sum is normalized as one OpenGL normal.
+      // Pixel rows increase downwards, hence positive down-up is +Y.
+      const nx = -(right - left) * size * 0.055 + surface.microNormalX[i];
+      const ny = (down - up) * size * 0.055 + surface.microNormalY[i];
+      const inv = 1 / Math.hypot(nx, ny, 1);
+
+      maps.normal[o] = Math.round((1 + nx*inv) * 127.5);
+      maps.normal[o+1] = Math.round((1 + ny*inv) * 127.5);
+      maps.normal[o+2] = Math.round((1 + inv) * 127.5);
       maps.normal[o+3] = 255;
       const neighborhood = (left+right+up+down+
       at(x-2, y)+at(x+2, y))/6;

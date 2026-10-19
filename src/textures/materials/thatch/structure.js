@@ -48,7 +48,10 @@ function noise(u, v, nx, ny, lattice) {
 export function makeReedSurface(size) {
   const n = size*size, p = RECIPE;
   const color = new Float32Array(n*3), coarse = new Float32Array(n);
-  const fiberRelief = new Float32Array(n), roughness = new Float32Array(n);
+  const fiberRelief = new Float32Array(n);
+  const microNormalX = new Float32Array(n);
+  const microNormalY = new Float32Array(n);
+  const roughness = new Float32Array(n);
 
   const broadLattice = new Float32Array(5*7);
   const detailLattice = new Float32Array(17*23);
@@ -120,6 +123,8 @@ export function makeReedSurface(size) {
           const radius = Math.ceil(strokeWidth+1);
           const baseX = Math.floor(center);
           const filament = 0.012*Math.sin(t*TAU*2+wav*TAU);
+          const leanSlope = (stalkLean + curve*Math.PI*Math.cos(t*Math.PI)) / fl;
+
           for (let dx = -radius; dx<=radius; dx++) {
             const ix = baseX+dx, d = Math.abs((ix+0.5)-center);
             const coverage = clamp(strokeWidth+0.5-d)*taper;
@@ -132,6 +137,15 @@ export function makeReedSurface(size) {
             }
             const cross = clamp(1-d/(strokeWidth+0.6));
             fiberRelief[i] = Math.max(fiberRelief[i], p.strandLift*cross*taper);
+
+            // A reed is rounded across its width. Preserve the direction
+            // of the visible stalk while keeping this out of displacement.
+            const across = clamp((ix + 0.5 - center) / (strokeWidth + 0.6), -1, 1);
+            const radial = across * 0.75 * taper;
+
+            microNormalX[i] += (radial - microNormalX[i]) * alpha;
+            microNormalY[i] += (radial * leanSlope - microNormalY[i]) * alpha;
+
             roughness[i] = Math.min(roughness[i], dryRoughness);
           }
         }
@@ -150,5 +164,23 @@ export function makeReedSurface(size) {
       height[i] = coarse[i]+smoothFiber*0.35;
     }
   }
-  return {color, height, coarse, roughness};
+  // Remove any net tilt introduced by overdraw ordering. A repeating mat
+  // of vertical straw must not tilt the entire material to one side.
+  let averageX = 0;
+  let averageY = 0;
+
+  for (let i = 0; i < n; i++) {
+    averageX += microNormalX[i];
+    averageY += microNormalY[i];
+  }
+
+  averageX /= n;
+  averageY /= n;
+
+  for (let i = 0; i < n; i++) {
+    microNormalX[i] -= averageX;
+    microNormalY[i] -= averageY;
+  }
+
+  return { color, height, coarse, roughness, microNormalX, microNormalY };
 }
