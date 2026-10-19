@@ -127,18 +127,20 @@ export function makeReedSurface(size){
     const palette=p.pigments[Math.floor(hash(k,row+240)*p.pigments.length)];
     const tone=(hash(k+400,row)-0.5)*0.105+groupTone;
     const tipRange=0.42+0.27*hash(k,row+780);
+    const dryRoughness=0.89+0.04*hash(k,row+305);
     for(let step=0;step<Math.ceil(fl);step++){
      const t=step/fl,taper=fade(t*24)*fade((1-t)*tipRange*22);
      if(taper<=0)continue;
      const center=sx+stalkLean*t+curve*Math.sin(t*Math.PI);
      const iy=wrap(Math.floor(sy+step),size);
      const radius=Math.ceil(strokeWidth+1);
+     const baseX=Math.floor(center);
+     const filament=0.012*Math.sin(t*TAU*2+wav*TAU);
      for(let dx=-radius;dx<=radius;dx++){
-      const ix=Math.floor(center)+dx,d=Math.abs((ix+0.5)-center);
+      const ix=baseX+dx,d=Math.abs((ix+0.5)-center);
       const coverage=clamp(strokeWidth+0.5-d)*taper;
       if(coverage<=0)continue;
       const i=iy*size+wrap(ix,size),o=i*3,alpha=0.72*coverage;
-      const filament=0.012*Math.sin(t*TAU*2+wav*TAU);
       for(let c=0;c<3;c++){
        const multiplier=c===0?1:c===1?0.82:0.67;
        const goal=palette[c]+(tone+filament)*multiplier;
@@ -146,7 +148,7 @@ export function makeReedSurface(size){
       }
       const cross=clamp(1-d/(strokeWidth+0.6));
       fiberRelief[i]=Math.max(fiberRelief[i],p.strandLift*cross*taper);
-      roughness[i]=Math.min(roughness[i],0.89+0.04*hash(k,row+305));
+      roughness[i]=Math.min(roughness[i],dryRoughness);
      }
     }
    }
