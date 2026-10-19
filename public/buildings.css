@@ -1,0 +1,128 @@
+:root {
+  font-family: system-ui, sans-serif;
+  color-scheme: dark;
+  color: #e5e8ec;
+  background: #13171b;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; }
+button, input, select { font: inherit; }
+
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  min-height: 76px;
+  padding: 12px 24px;
+  border-bottom: 1px solid #353d45;
+  background: #1d2329;
+}
+
+.app-header h1 { margin: 0; font-size: 21px; font-weight: 650; }
+.eyebrow { display: block; color: #99a9bc; font-size: 11px; margin-bottom: 3px; }
+.app-header nav { display: flex; gap: 14px; flex-wrap: wrap; }
+.app-header nav a { color: #b7c4d3; text-decoration: none; font-size: 13px; }
+.app-header nav a[aria-current] { color: white; font-weight: 700; }
+
+.workspace {
+  display: grid;
+  grid-template-columns: 288px minmax(320px, 1fr) minmax(360px, 1.25fr);
+  min-height: calc(100vh - 76px);
+}
+
+.inspector {
+  border-right: 1px solid #333d46;
+  background: #20272e;
+  padding: 18px;
+  overflow-y: auto;
+  max-height: calc(100vh - 76px);
+}
+
+h2 {
+  margin: 14px 0 12px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.inspector h2:not(:first-child) {
+  border-top: 1px solid #39434c;
+  padding-top: 17px;
+  margin-top: 20px;
+}
+
+label { display: grid; gap: 5px; font-size: 12px; color: #c5ced7; }
+label.check { display: flex; align-items: center; }
+label.check input { width: auto; margin: 0 4px 0 0; }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 10px 0; }
+
+input, select, button {
+  width: 100%;
+  min-width: 0;
+  padding: 9px 10px;
+  border: 1px solid #4b5763;
+  border-radius: 5px;
+  color: #edf3f8;
+  background: #2c3640;
+}
+
+input:focus-visible, select:focus-visible, button:focus-visible, a:focus-visible {
+  outline: 2px solid #80aee2;
+  outline-offset: 2px;
+}
+
+button { background: #466eac; border-color: #5a83c2; cursor: pointer; }
+button:hover { filter: brightness(1.12); }
+button:disabled { opacity: 0.47; cursor: not-allowed; }
+button.secondary { background: #35414b; border-color: #586472; }
+
+.hint, .panel-note { font-size: 12px; color: #a1afbc; line-height: 1.55; }
+.opening-editor { display: grid; gap: 8px; margin-top: 10px; }
+.opening-editor[hidden] { display: none; }
+
+.plan-panel, .preview-panel { min-width: 0; position: relative; display: flex; flex-direction: column; }
+.plan-panel { border-right: 1px solid #353d45; background: #192127; }
+.preview-panel { background: #171c21; }
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  min-height: 66px;
+  padding: 12px 18px;
+  border-bottom: 1px solid #303c45;
+}
+.panel-header h2 { margin: 0; }
+.panel-header small { font-weight: 400; color: #91a2af; }
+.toolbar { display: flex; gap: 5px; }
+.toolbar button { width: auto; padding: 7px 8px; font-size: 12px; }
+#floorplan { display: block; flex: 1; width: 100%; min-height: 360px; touch-action: none; cursor: crosshair; }
+#floorplan .vertex { fill: #dfefff; stroke: #2e5d83; stroke-width: .05; cursor: grab; }
+#floorplan .vertex.selected { fill: #f2bd65; }
+#floorplan .wall-hit { fill: none; stroke: transparent; stroke-width: .48; cursor: pointer; }
+#floorplan .wall-line { stroke: #f0cf98; stroke-width: .085; pointer-events: none; }
+#floorplan .wall-line.selected { stroke: #73d8e9; stroke-width: .12; }
+#floorplan .door-marker { fill: #d99e60; stroke: #422916; stroke-width: .06; cursor: pointer; }
+#floorplan .window-marker { fill: #7ccce0; stroke: #214e68; stroke-width: .05; cursor: pointer; }
+#building-view { width: 100%; flex: 1; min-height: 390px; display: block; }
+.panel-note { margin: 0; padding: 9px 18px; background: #202830; }
+#mesh-count { font-size: 12px; color: #9baeba; }
+.export-tools { display: flex; padding: 13px 18px 0; gap: 8px; }
+.export-tools button { flex: 1; }
+#building-status { min-height: 35px; margin: 12px 18px; font-size: 13px; color: #c8d7e1; }
+#building-status.error { color: #ffadab; }
+
+@media (max-width: 1180px) {
+  .workspace { grid-template-columns: 280px minmax(0, 1fr); }
+  .preview-panel { grid-column: 2; border-top: 1px solid #353d45; }
+  .inspector { grid-row: 1 / span 2; max-height: none; }
+}
+@media (max-width: 730px) {
+  .app-header { align-items: start; flex-direction: column; }
+  .workspace { display: flex; flex-direction: column; }
+  .inspector { max-height: none; border-bottom: 1px solid #353d45; }
+  #floorplan { height: 420px; }
+  #building-view { height: 450px; }
+  .export-tools { flex-wrap: wrap; }
+}

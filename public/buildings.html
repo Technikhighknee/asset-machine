@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Building Studio · Asset Machine</title>
+  <link rel="stylesheet" href="/buildings.css">
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "/vendor/three/build/three.module.js",
+        "three/addons/": "/vendor/three/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <header class="app-header">
+    <div>
+      <span class="eyebrow">Asset Machine</span>
+      <h1>Building Studio</h1>
+    </div>
+
+    <nav aria-label="Studio navigation">
+      <a href="/">Texture Studio</a>
+      <a href="/buildings.html" aria-current="page">Building Studio</a>
+    </nav>
+  </header>
+
+  <main class="workspace">
+    <aside class="inspector">
+      <h2>Building</h2>
+      <label>Name <input data-prop="name" type="text" maxlength="80"></label>
+      <div class="pair">
+        <label>Floors <input data-prop="floors" type="number" min="1" max="5" step="1"></label>
+        <label>Floor height (m) <input data-prop="floorHeight" type="number" min="2" max="6" step="0.1"></label>
+        <label>Foundation (m) <input data-prop="foundationHeight" type="number" min="0.1" max="2" step="0.05"></label>
+        <label>Wall width (m) <input data-prop="wallThickness" type="number" min="0.1" max="0.7" step="0.02"></label>
+      </div>
+
+      <h2>Roof</h2>
+      <label>Construction
+        <select data-prop="roof.type">
+          <option value="gable">Gable · rectangular</option>
+          <option value="shed">Shed · any footprint</option>
+          <option value="flat">Flat · any footprint</option>
+        </select>
+      </label>
+      <div class="pair">
+        <label>Pitch (°) <input data-prop="roof.pitch" type="number" min="5" max="65" step="1"></label>
+        <label>Overhang (m) <input data-prop="roof.overhang" type="number" min="0" max="1.5" step="0.05"></label>
+        <label>Roof thickness (m) <input data-prop="roof.thickness" type="number" min="0.05" max="0.5" step="0.02"></label>
+        <label>Ridge
+          <select data-prop="roof.ridge">
+            <option value="auto">Auto</option>
+            <option value="x">X axis</option>
+            <option value="z">Z axis</option>
+          </select>
+        </label>
+      </div>
+
+      <h2>Timber frame</h2>
+      <label class="check"><input data-prop="frame.enabled" type="checkbox"> Enabled</label>
+      <div class="pair">
+        <label>Bay spacing (m) <input data-prop="frame.spacing" type="number" min="0.8" max="5" step="0.1"></label>
+        <label>Beam size (m) <input data-prop="frame.thickness" type="number" min="0.08" max="0.4" step="0.02"></label>
+      </div>
+
+      <h2>Doors &amp; windows</h2>
+      <p class="hint">Select a wall in the plan. Openings cut through the actual wall mesh.</p>
+      <div class="pair">
+        <button id="add-door" type="button">+ Door</button>
+        <button id="add-window" type="button">+ Window</button>
+      </div>
+      <label>Selected element
+        <select id="opening-list" aria-label="Select opening"></select>
+      </label>
+      <div id="opening-editor" class="opening-editor">
+        <div class="pair">
+          <label>Floor <input id="opening-floor" type="number" min="1" max="5" step="1"></label>
+          <label>Position along wall (%) <input id="opening-at" type="number" min="1" max="99" step="1"></label>
+          <label>Width (m) <input id="opening-width" type="number" min="0.5" max="5" step="0.05"></label>
+          <label>Height (m) <input id="opening-height" type="number" min="0.5" max="5" step="0.05"></label>
+          <label>Sill (m) <input id="opening-sill" type="number" min="0" max="4" step="0.05"></label>
+        </div>
+        <button id="remove-opening" type="button" class="secondary">Remove selected opening</button>
+      </div>
+    </aside>
+
+    <section class="plan-panel">
+      <div class="panel-header">
+        <h2>Footprint <small>metres</small></h2>
+        <div class="toolbar">
+          <button id="add-vertex" type="button">+ Corner</button>
+          <button id="remove-vertex" type="button">− Corner</button>
+          <button id="reset-building" type="button">Reset</button>
+        </div>
+      </div>
+      <svg id="floorplan" role="img" aria-label="Editable 2D building footprint" tabindex="0"></svg>
+      <p class="panel-note">Drag vertices to reshape. Click a wall to select it. Add Corner splits the selected wall. Grid snap: 0.25 m.</p>
+    </section>
+
+    <section class="preview-panel">
+      <div class="panel-header">
+        <h2>3D building</h2>
+        <span id="mesh-count"></span>
+      </div>
+      <canvas id="building-view" aria-label="Interactive 3D building preview"></canvas>
+      <p class="panel-note">Drag to orbit · Scroll to zoom · Changes are reproducible</p>
+      <div class="export-tools">
+        <button id="save-building" type="button" class="secondary">Save editable JSON</button>
+        <button id="load-building" type="button" class="secondary">Load JSON</button>
+        <input id="load-file" type="file" accept=".json,application/json" hidden>
+        <button id="export-glb" type="button">Export GLB</button>
+      </div>
+      <p id="building-status" role="status" aria-live="polite"></p>
+    </section>
+  </main>
+
+  <script type="module" src="/building-studio.js"></script>
+</body>
+</html>
